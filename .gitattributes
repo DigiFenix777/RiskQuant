@@ -1,8 +1,8 @@
 # ------------------------------------------------------------
 # Core: normalize line endings and treat text sensibly
 # ------------------------------------------------------------
-*               text=auto          # Let Git detect text/binary; normalize line endings
-*.sh            text eol=lf        # Shell scripts should use LF
+*               text=auto
+*.sh            text eol=lf
 *.py            text eol=lf
 *.pyw           text eol=lf
 *.toml          text eol=lf
@@ -14,7 +14,7 @@
 *.ini           text eol=lf
 *.cfg           text eol=lf
 *.env           text eol=lf
-*.bat           text eol=crlf      # Windows batch files typically CRLF
+*.bat           text eol=crlf
 
 # ------------------------------------------------------------
 # Binary / no-diff files (avoid noisy diffs)
@@ -23,7 +23,6 @@
 *.jpg           binary
 *.jpeg          binary
 *.gif           binary
-*.svg           text eol=lf        # SVGs are XML (text); keep LF but allow diffs
 *.pdf           binary
 *.zip           binary
 *.gz            binary
@@ -34,41 +33,30 @@
 *.sqlite        binary
 *.sqlite3       binary
 
-# Jupyter notebooks can create massive, noisy diffs.
-# If you prefer *no* diffs in PRs, uncomment the next line:
-# *.ipynb       -diff
+# SVGs are XML (text) — allow diffs and keep LF
+*.svg           text eol=lf
 
 # ------------------------------------------------------------
 # GitHub Linguist (repo language stats and file classification)
 # ------------------------------------------------------------
-
-# Treat vendored/third-party code as vendored so it doesn’t skew language stats
 vendor/**       linguist-vendored
 third_party/**  linguist-vendored
-
-# Treat generated artifacts as generated
 dist/**         linguist-generated
 build/**        linguist-generated
 html/**         linguist-generated
 images/**       linguist-generated
-
-# Keep documentation from skewing language stats
 docs/**         linguist-documentation
 *.md            linguist-documentation
-
-# If you keep datasets in-repo, mark them as vendored or data (not source)
 data/**         linguist-vendored
 
 # ------------------------------------------------------------
-# Optional: merge strategies for “lock”/machine files
-# (Uncomment if you use Poetry/Pipenv and prefer taking incoming on conflicts)
+# Optional: merge strategies for lock/machine files
 # ------------------------------------------------------------
 # poetry.lock   merge=union
 # Pipfile.lock  merge=union
 
 # ------------------------------------------------------------
-# Optional: export-ignore for archives (keeps source bundles lean)
-# Uncomment to exclude dev-only files from `git archive`
+# Optional: export-ignore for archives
 # ------------------------------------------------------------
 # .gitattributes export-ignore
 # .gitignore     export-ignore
