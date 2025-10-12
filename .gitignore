@@ -134,18 +134,23 @@ $RECYCLE.BIN/
 # --------------------------------------
 # Project-specific
 # --------------------------------------
+
 # Logs
 *.log
 logs/
 log/
 
-# Data
-data/*.csv
-data/*.json
-data/*.xml
-!data/README.md   # keep dataset notes
+# Data directories
+# Keep input datasets but ignore generated outputs
+data/output/
+data/output/**
+data/input/*.bak
+data/input/*.tmp
+!data/input/assets.csv
+!data/input/controls_map.csv
+!data/input/README.md   # keep documentation file if you add one
 
-# Images / Outputs
+# Images / Charts
 images/*.png
 images/*.jpg
 images/*.jpeg
@@ -153,9 +158,18 @@ images/*.gif
 images/*.svg
 !images/README.md
 
-# HTML (generated reports)
+# HTML reports (if generated later)
 html/*.html
 !html/README.md
 
-# Notebooks (if you want to exclude outputs)
-*.ipynb
+# Local analysis files
+*.xlsx
+*.csv
+*.json
+*.xml
+!data/input/assets.csv
+!data/input/controls_map.csv
+
+# IDE metadata (redundant but safe)
+.idea/
+.vscode/
