@@ -64,13 +64,95 @@ def print_preview(df: pd.DataFrame, n: int = 5) -> None:
     print("Preview (first rows):")
     print(df.head(n).to_string(index=False))
 
+# --- Allowed sets & normalization helpers ---
+ALLOWED = {
+    "Likelihood": {"Very Low", "Low", "Medium", "High", "Critical"},
+    "Impact": {"Low", "Medium", "High", "Critical"},
+    "Status": {"Open", "In Progress", "Closed"},
+}
+
+# Common typo/synonym fixes (case-insensitive keys)
+FIXUPS = {
+    "likelihood": {
+        "v low": "Very Low",
+        "verylow": "Very Low",
+        "med": "Medium",
+        "medium ": "Medium",
+        "mediuim": "Medium",
+        "mod": "Medium",
+        "hi": "High",
+        "critical ": "Critical",
+    },
+    "impact": {
+        "med": "Medium",
+        "medium ": "Medium",
+        "mod": "Medium",
+        "crit": "Critical",
+        "critical ": "Critical",
+    },
+    "status": {
+        "inprogress": "In Progress",
+        "in-progress": "In Progress",
+        "wip": "In Progress",
+        "opened": "Open",
+        "close": "Closed",
+    },
+}
+
+def _clean_token(value: str) -> str:
+    if value is None:
+        return value
+    return " ".join(str(value).strip().split())  # trim + collapse whitespace
+
+def _normalize_value(col: str, value: str) -> str:
+    if value is None:
+        return value
+    v = _clean_token(value)
+    key = v.lower().replace("-", "").replace("_", "").replace("  ", " ")
+    fixes = FIXUPS.get(col.lower(), {})
+    if key in fixes:
+        return fixes[key]
+    # Title-case common categorical values
+    titled = v.title()
+    return titled
+
+def validate_and_clean_values(df: pd.DataFrame) -> list[str]:
+    """Normalize categorical text and report any values still outside the allowed sets."""
+    issues: list[str] = []
+
+    # Normalize Likelihood / Impact / Status text
+    for col in ("Likelihood", "Impact", "Status"):
+        if col in df.columns:
+            df[col] = df[col].map(lambda x: _normalize_value(col, x))
+
+    # Validate against allowed sets
+    for col, allowed in ALLOWED.items():
+        if col in df.columns:
+            bad_mask = ~df[col].isin(allowed) & df[col].notna()
+            if bad_mask.any():
+                bad_vals = sorted(df.loc[bad_mask, col].astype(str).unique().tolist())
+                issues.append(f"{col}: unexpected values {bad_vals} (allowed: {sorted(allowed)})")
+
+    return issues
+
+
 if __name__ == "__main__":
     settings = load_settings()
     df_raw = load_risk_register(settings)
     validate_required_columns(df_raw)
     df = normalize_columns(df_raw)
 
+    # NEW: clean + validate value domains
+    issues = validate_and_clean_values(df)
+
     print("✅ Validation passed; columns normalized.")
+    if issues:
+        print("⚠️  Value issues detected:")
+        for msg in issues:
+            print("  -", msg)
+    else:
+        print("✅ Categorical values look good (Likelihood/Impact/Status).")
+
     print(f"Normalized columns: {list(df.columns)}")
     print_preview(df, n=5)
 
