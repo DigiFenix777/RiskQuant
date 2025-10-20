@@ -1,3 +1,0 @@
-asset_id,asset_name,scenario,aro,impact_min,impact_mode,impact_max,control_reduction,cvss,kev
-A-001,Finance DB,Ransomware,0.6,20000,50000,150000,0.25,8.8,True
-A-002,Email,Phishing BEC,1.2,5000,15000,70000,0.10,7.2,False
