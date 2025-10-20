@@ -1,0 +1,7 @@
+simulation:
+  runs: 20000
+  seed: 42
+  percentiles: [50, 90, 95, 99]
+
+data:
+  risk_register_path: "data/inputs/Risk_Register_Schema_MonteCarlo.xlsx"
