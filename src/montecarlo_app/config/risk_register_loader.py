@@ -33,11 +33,44 @@ def load_risk_register(settings: dict) -> pd.DataFrame:
     return df
 
 
+REQUIRED_HEADERS = {
+    "Risk ID": "Risk_ID",
+    "Risk Description": "Risk_Description",
+    "Regulatory Impact": "Regulatory_Impact",
+    "Likelihood": "Likelihood",
+    "Impact": "Impact",
+    "Risk Rating": "Risk_Rating",              # derived/metadata
+    "Mitigation/Control": "Control_Description",
+    "Responsible Party": "Owner",
+    "Status": "Status",
+}
+
+def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename human-friendly headers to stable internal names."""
+    rename_map = {k: v for k, v in REQUIRED_HEADERS.items() if k in df.columns}
+    return df.rename(columns=rename_map)
+
+def validate_required_columns(df: pd.DataFrame) -> None:
+    """Raise a clear error if any expected columns are missing."""
+    missing = [k for k in REQUIRED_HEADERS if k not in df.columns and REQUIRED_HEADERS[k] not in df.columns]
+    if missing:
+        raise ValueError(
+            f"Missing required columns: {missing}. "
+            f"Found columns: {list(df.columns)}"
+        )
+
+def print_preview(df: pd.DataFrame, n: int = 5) -> None:
+    """Show a tiny preview for sanity without spamming console."""
+    print("Preview (first rows):")
+    print(df.head(n).to_string(index=False))
+
 if __name__ == "__main__":
     settings = load_settings()
-    df = load_risk_register(settings)
-    print("✅ Loaded Risk Register successfully!")
-    print(f"File path: {project_root() / settings['data']['risk_register_path']}")
-    print(f"Rows: {len(df)}, Columns: {len(df.columns)}")
-    print("Column headers:")
-    print(df.columns.tolist())
+    df_raw = load_risk_register(settings)
+    validate_required_columns(df_raw)
+    df = normalize_columns(df_raw)
+
+    print("✅ Validation passed; columns normalized.")
+    print(f"Normalized columns: {list(df.columns)}")
+    print_preview(df, n=5)
+
