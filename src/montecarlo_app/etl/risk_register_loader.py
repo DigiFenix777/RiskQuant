@@ -136,15 +136,42 @@ def validate_and_clean_values(df: pd.DataFrame) -> list[str]:
     return issues
 
 
+def load_mappings() -> dict:
+    """Load qualitative→numeric mappings from YAML."""
+    m_path = project_root() / "src" / "montecarlo_app" / "config" / "mappings.yaml"
+    with open(m_path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+def derive_parameters(df: pd.DataFrame, maps: dict) -> pd.DataFrame:
+    """
+    Using Likelihood/Impact columns, attach numeric parameters needed by the simulator:
+    - Lambda_Min/Mode/Max
+    - Loss_Min/Mode/Max
+    """
+    like_map = maps["likelihood_to_lambda"]
+    imp_map  = maps["impact_to_loss"]
+
+    def _like(row):
+        cfg = like_map.get(row["Likelihood"])
+        return pd.Series([cfg["min"], cfg["mode"], cfg["max"]], index=["Lambda_Min","Lambda_Mode","Lambda_Max"]) if cfg else pd.Series([None,None,None], index=["Lambda_Min","Lambda_Mode","Lambda_Max"])
+
+    def _imp(row):
+        cfg = imp_map.get(row["Impact"])
+        return pd.Series([cfg["min"], cfg["mode"], cfg["max"]], index=["Loss_Min","Loss_Mode","Loss_Max"]) if cfg else pd.Series([None,None,None], index=["Loss_Min","Loss_Mode","Loss_Max"])
+
+    df = df.copy()
+    df[["Lambda_Min","Lambda_Mode","Lambda_Max"]] = df.apply(_like, axis=1)
+    df[["Loss_Min","Loss_Mode","Loss_Max"]]       = df.apply(_imp, axis=1)
+    return df
+
+
 if __name__ == "__main__":
     settings = load_settings()
     df_raw = load_risk_register(settings)
     validate_required_columns(df_raw)
     df = normalize_columns(df_raw)
 
-    # NEW: clean + validate value domains
     issues = validate_and_clean_values(df)
-
     print("✅ Validation passed; columns normalized.")
     if issues:
         print("⚠️  Value issues detected:")
@@ -153,6 +180,14 @@ if __name__ == "__main__":
     else:
         print("✅ Categorical values look good (Likelihood/Impact/Status).")
 
-    print(f"Normalized columns: {list(df.columns)}")
-    print_preview(df, n=5)
+    mappings = load_mappings()
+    df_params = derive_parameters(df, mappings)
+
+    print("✅ Parameters derived (Lambda_*, Loss_*).")
+    print(df_params[[
+        "Risk_ID","Likelihood","Impact",
+        "Lambda_Min","Lambda_Mode","Lambda_Max",
+        "Loss_Min","Loss_Mode","Loss_Max"
+    ]].head(5).to_string(index=False))
+
 

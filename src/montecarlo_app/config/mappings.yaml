@@ -1,0 +1,12 @@
+likelihood_to_lambda:
+  Very Low: { min: 0.0,  mode: 0.05, max: 0.2 }
+  Low:      { min: 0.2,  mode: 0.35, max: 0.5 }
+  Medium:   { min: 0.5,  mode: 1.0,  max: 1.5 }
+  High:     { min: 1.5,  mode: 2.0,  max: 3.0 }
+  Critical: { min: 3.0,  mode: 4.0,  max: 6.0 }
+
+impact_to_loss:
+  Low:      { min: 10000,  mode: 20000,   max: 40000 }
+  Medium:   { min: 50000,  mode: 100000,  max: 250000 }
+  High:     { min: 150000, mode: 300000,  max: 600000 }
+  Critical: { min: 500000, mode: 1000000, max: 2000000 }
