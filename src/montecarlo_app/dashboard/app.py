@@ -45,21 +45,31 @@ st.set_page_config(page_title="Cyber Risk Simulation Dashboard", layout="wide")
 st.title("📊 Cyber Risk Simulation Dashboard")
 st.caption("Quantify annual cyber loss with Monte Carlo. Adjust assumptions and see impact instantly.")
 
-# ---------- Controls Bar ----------
-with st.container():
-    c1, c2, c3, c4, c5 = st.columns([2, 1, 1, 1, 2])
+# ---------- Sidebar Controls ----------
+with st.sidebar:
+    st.header("⚙️ Model Settings")
     settings = load_settings()
     risk_register_path = settings["data"]["risk_register_path"]
+    st.caption(f"Using risk register:\n{risk_register_path}")
 
-    c1.write("**Risk Register**")
-    c1.code(risk_register_path, language="text")
+    n_sims = st.number_input("Number of Simulations", min_value=1000, max_value=200000,
+                             value=int(settings["simulation"]["runs"]), step=1000)
+    seed = st.number_input("Random Seed", min_value=0, max_value=10**7,
+                           value=int(settings["simulation"]["seed"]), step=1)
+    show_percentiles = st.multiselect("Percentiles to Show",
+                                      options=[50, 90, 95, 99],
+                                      default=settings["simulation"]["percentiles"])
+    currency = st.selectbox("Currency", options=["USD"], index=0)
 
-    n_sims = c2.number_input("# Sims", min_value=1000, max_value=200000, value=int(settings["simulation"]["runs"]), step=1000)
-    seed = c3.number_input("Seed", min_value=0, max_value=10**7, value=int(settings["simulation"]["seed"]), step=1)
-    show_percentiles = c4.multiselect("Percentiles", options=[50, 90, 95, 99], default=settings["simulation"]["percentiles"])
-    currency = c5.selectbox("Currency", options=["USD"], index=0)
+    st.divider()
+    st.header("ℹ️ About")
+    st.info(
+        "Monte Carlo simulates thousands of risk outcomes to estimate "
+        "expected and tail losses. Use the controls above to adjust parameters."
+    )
 
     run_btn = st.button("▶ Run Simulation", type="primary")
+
 
 # ---------- Load + Prepare Data (on demand) ----------
 @st.cache_data(show_spinner=False)
