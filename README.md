@@ -7,6 +7,14 @@
 ![Issues](https://img.shields.io/github/issues/DigiFenix777/<REPO>)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+## 🏁 MVP Complete
+Phase 1 - Foundations (Completed): 
+- Project Infrastructure, Simulation Engine, Data Output
+Phase 2 - Interactive Dashboard (MVP Core) (Completed):
+- Streamlit Dashboard Features
+![RiskQuant_MVP_24-10-2025.png](images/RiskQuant_MVP_24-10-2025.png)
+
+
 ## 🔑 Executive Summary
 One paragraph tying Python → **cybersecurity** (automation, analysis, reporting).
 
