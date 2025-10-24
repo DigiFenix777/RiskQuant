@@ -11,6 +11,9 @@ venv/
 ENV/
 env/
 *.env
+.idea/
+__pycache__/
+*.pyc
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
@@ -149,6 +152,11 @@ data/input/*.tmp
 !data/input/assets.csv
 !data/input/controls_map.csv
 !data/input/README.md   # keep documentation file if you add one
+
+# Risk registers / outputs
+data/inputs/
+data/outputs/
+*.enc
 
 # Images / Charts
 images/*.png
