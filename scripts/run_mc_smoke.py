@@ -1,27 +1,26 @@
 """
 Quick smoke test for the Monte Carlo engine.
 
-This script loads the risk register and runs a single scenario
-to validate simulation logic. It prints summary stats for verification.
+Loads the risk register, derives parameters, runs a small simulation
+for the FIRST scenario only, and prints summary stats.
 """
 
-# --- Standard library imports ---
+# --- Standard library ---
 import sys
 from pathlib import Path
 
-# --- Third-party imports ---
+# --- Third-party ---
 import numpy as np
 import matplotlib.pyplot as plt
 
-# --- Local imports (must come after sys.path setup, if needed) ---
-# Add project root to sys.path (before local imports)
-ROOT = Path(__file__).resolve().parents[1]
+# --- Make src importable BEFORE local imports ---
+ROOT = Path(__file__).resolve().parents[1]  # repo root: .../RiskQuant
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-# --- Internal modules ---
-from montecarlo_app.etl.risk_register_loader import (
+# --- Local imports (Ruff E402 due to sys.path tweak above) ---
+from montecarlo_app.etl.risk_register_loader import (  # noqa: E402
     load_settings,
     load_risk_register,
     validate_required_columns,
@@ -30,8 +29,10 @@ from montecarlo_app.etl.risk_register_loader import (
     load_mappings,
     derive_parameters,
 )
-from montecarlo_app.model.monte_carlo import simulate_scenario_row, summarize
-
+from montecarlo_app.model.monte_carlo import (  # noqa: E402
+    simulate_scenario_row,
+    summarize,
+)
 
 
 def main():
