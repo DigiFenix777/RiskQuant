@@ -1,21 +1,26 @@
 """
-run_mc_smoke.py
----------------
-Loads your risk register, derives parameters, runs a small simulation
+Quick smoke test for the Monte Carlo engine.
+
+Loads the risk register, derives parameters, runs a small simulation
 for the FIRST scenario only, and prints summary stats.
 """
-import numpy as np
-from pathlib import Path
-import matplotlib.pyplot as plt
-import sys
 
+# --- Standard library ---
+import sys
+from pathlib import Path
+
+# --- Third-party ---
+import numpy as np
+import matplotlib.pyplot as plt
+
+# --- Make src importable BEFORE local imports ---
 ROOT = Path(__file__).resolve().parents[1]  # repo root: .../RiskQuant
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-
-from montecarlo_app.etl.risk_register_loader import (
+# --- Local imports (Ruff E402 due to sys.path tweak above) ---
+from montecarlo_app.etl.risk_register_loader import (  # noqa: E402
     load_settings,
     load_risk_register,
     validate_required_columns,
@@ -24,7 +29,10 @@ from montecarlo_app.etl.risk_register_loader import (
     load_mappings,
     derive_parameters,
 )
-from montecarlo_app.model.monte_carlo import simulate_scenario_row, summarize
+from montecarlo_app.model.monte_carlo import (  # noqa: E402
+    simulate_scenario_row,
+    summarize,
+)
 
 
 def main():
