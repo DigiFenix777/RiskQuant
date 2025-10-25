@@ -14,10 +14,11 @@ import json
 from io import StringIO
 from pathlib import Path
 import sys
+
 import numpy as np
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
+import plotly.express as px
 import streamlit as st
 
 # Ensure we can import from src/
@@ -26,7 +27,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from montecarlo_app.etl.risk_register_loader import (
+from montecarlo_app.etl.risk_register_loader import (  # noqa: E402
     load_settings,
     load_risk_register,
     validate_required_columns,
@@ -35,7 +36,7 @@ from montecarlo_app.etl.risk_register_loader import (
     load_mappings,
     derive_parameters,
 )
-from montecarlo_app.model.monte_carlo import (
+from montecarlo_app.model.monte_carlo import (  # noqa: E402
     simulate_portfolio,
     summarize,
 )

@@ -18,6 +18,13 @@ Phase 2 - Interactive Dashboard (MVP Core) (Completed):
 ## 🔑 Executive Summary
 One paragraph tying Python → **cybersecurity** (automation, analysis, reporting).
 
+## 🚨 Security (GRC Portfolio)
+- **Do not commit real risk registers** or secrets.
+- Optionally use encrypted inputs (`.enc`) and set `RISKQ_ENC_KEY` at runtime.
+- If deploying the Streamlit app, place it behind authentication (reverse proxy or app-level auth).
+- Enable GitHub security features: Secret scanning, Dependabot, CodeQL (Settings ▸ Security).
+
+
 ## 🗂️ Structure
 - `src/` code • `tests/` unit tests • `data/` sample inputs • `images/portfolio/` exported plots
 

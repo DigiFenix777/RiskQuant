@@ -76,10 +76,6 @@ def main():
         print(f"  {rid}: p95={s['p95']:,.0f}, mean={s['mean']:,.0f}")
 
     # --- Export artifacts ---
-    from pathlib import Path
-    import numpy as np
-    import matplotlib.pyplot as plt
-
     outputs = Path(__file__).resolve().parents[1] / "data" / "outputs"
     outputs.mkdir(parents=True, exist_ok=True)
 
