@@ -346,48 +346,168 @@ if st.session_state.run:
     # ---------- Risk Matrix Heatmap ----------
     st.subheader("🔥 Risk Matrix (Likelihood × Impact) — Colored by p95 Loss")
 
-    # Merge stats back for Likelihood/Impact context
+    # Cell metric toggle + readability options
+    col_metric, col_rm1, col_rm2 = st.columns([1, 1, 1])
+    metric_type = col_metric.radio(
+        "Cell metric",
+        options=["Mean p95", "Total p95"],
+        horizontal=True,
+        key="rm_metric_type",
+    )
+    show_labels = col_rm1.checkbox("Show labels (n & p95)", value=True, key="rm_show_labels")
+    boost_contrast = col_rm2.checkbox("Boost contrast (5–95% autoscale)", value=True, key="rm_boost_contrast")
+
+    # Merge stats back for Likelihood/Impact (and Owner for hover) context
+    merge_cols = ["Risk_ID", "Likelihood", "Impact"]
+    if "Owner" in df_params_filtered.columns:
+        merge_cols.append("Owner")
+
     df_stats_ctx = df_stats.merge(
-        df_params_filtered[["Risk_ID", "Likelihood", "Impact"]],
+        df_params_filtered[merge_cols],
         on="Risk_ID",
         how="left",
     )
 
+    # Axis orders (keep consistent with your mappings)
     like_order = ["Very Low", "Low", "Medium", "High", "Critical"]
     imp_order = ["Low", "Medium", "High", "Critical"]
 
-    # Aggregate mean p95 by (Likelihood, Impact)
-    matrix = (
-        df_stats_ctx
-        .groupby(["Likelihood", "Impact"], as_index=False)["p95"]
-        .mean()
-        .rename(columns={"p95": "p95_mean"})
-        if not df_stats_ctx.empty else
-        pd.DataFrame(columns=["Likelihood", "Impact", "p95_mean"])
+    # Aggregate per (Likelihood, Impact)
+    if not df_stats_ctx.empty:
+        grouped = (
+            df_stats_ctx
+            .groupby(["Likelihood", "Impact"], as_index=False)
+            .agg(
+                p95_mean=("p95", "mean"),
+                p95_sum=("p95", "sum"),
+                n=("p95", "size"),
+            )
+        )
+        grouped["p95_total"] = grouped["p95_sum"]
+        grouped["p95_plot"] = grouped["p95_mean"] if metric_type == "Mean p95" else grouped["p95_total"]
+    else:
+        grouped = pd.DataFrame(columns=["Likelihood", "Impact", "p95_mean", "p95_total", "n", "p95_plot"])
+
+    # Ensure full grid coverage
+    grid = pd.MultiIndex.from_product([like_order, imp_order], names=["Likelihood", "Impact"]).to_frame(index=False)
+    matrix_full = grid.merge(grouped, on=["Likelihood", "Impact"], how="left").fillna({"p95_mean": 0, "p95_total": 0, "p95_plot": 0, "n": 0})
+
+    # Pivot to matrices
+    z_mat = (
+        matrix_full
+        .pivot(index="Impact", columns="Likelihood", values="p95_plot")
+        .reindex(index=imp_order, columns=like_order)
+    )
+    n_mat = (
+        matrix_full
+        .pivot(index="Impact", columns="Likelihood", values="n")
+        .reindex(index=imp_order, columns=like_order)
     )
 
-    # Ensure full grid and pivot
-    grid = pd.MultiIndex.from_product([like_order, imp_order], names=["Likelihood", "Impact"]).to_frame(index=False)
-    matrix_full = grid.merge(matrix, on=["Likelihood", "Impact"], how="left").fillna({"p95_mean": 0})
-    mat = matrix_full.pivot(index="Impact", columns="Likelihood", values="p95_mean").reindex(index=imp_order,
-                                                                                             columns=like_order)
+    # Mask empty cells so they render blank (not “0 USD” color)
+    z_plot = z_mat.copy().astype(float)
+    z_plot[n_mat.fillna(0).values == 0] = np.nan
 
-    fig_heat = go.Figure(data=go.Heatmap(
-        z=mat.values,
-        x=mat.columns.tolist(),
-        y=mat.index.tolist(),
-        coloraxis="coloraxis",
-        hovertemplate="Likelihood=%{x}<br>Impact=%{y}<br>Mean p95: $%{z:,.0f}<extra></extra>",
-    ))
+    # Optional contrast boost (clip to 5th–95th pct of non-empty)
+    valid_vals = z_plot.values[~np.isnan(z_plot.values)]
+    if valid_vals.size > 0 and boost_contrast:
+        zmin = float(np.percentile(valid_vals, 5))
+        zmax = float(np.percentile(valid_vals, 95))
+        if zmin == zmax:  # guard degenerate case
+            zmin = None
+            zmax = None
+    else:
+        zmin = None
+        zmax = None
+
+    # Optional labels inside cells (n + p95)
+    if show_labels:
+        def _fmt_cell(v, n):
+            if (n or 0) <= 0 or v is None or (isinstance(v, float) and np.isnan(v)):
+                return ""
+            # Show millions with 1 decimal (works for Mean or Total)
+            return f"n={int(n)}\n${v/1_000_000:,.1f}M"
+
+        text_mat = z_plot.copy()
+        for i in range(text_mat.shape[0]):
+            for j in range(text_mat.shape[1]):
+                text_mat.iat[i, j] = _fmt_cell(z_plot.iat[i, j], n_mat.iat[i, j])
+        text_vals = text_mat.values
+        texttemplate = "%{text}"
+    else:
+        text_vals = None
+        texttemplate = None
+
+    # Build per-cell list of top 3 scenarios for hover
+    # (requires df_stats_ctx with Risk_ID, p95, and Owner if available)
+    top_scenarios = []
+    for imp in imp_order:
+        row_data = []
+        for like in like_order:
+            subset = df_stats_ctx.query("Impact == @imp and Likelihood == @like")
+            if subset.empty:
+                row_data.append("")
+            else:
+                cols = ["Risk_ID", "p95"]
+                owner_present = "Owner" in subset.columns
+                if owner_present:
+                    cols.append("Owner")
+                tops_df = subset.nlargest(3, "p95")[cols].copy()
+                # Format each scenario line
+                lines = []
+                for _, rr in tops_df.iterrows():
+                    rid = rr.get("Risk_ID", "")
+                    p95v = rr.get("p95", 0.0)
+                    if owner_present:
+                        owner = rr.get("Owner", "")
+                        line = f"{rid} ({owner}, ${p95v/1_000_000:.1f}M)"
+                    else:
+                        line = f"{rid} (${p95v/1_000_000:.1f}M)"
+                    lines.append(line)
+                row_data.append("<br>".join(lines))
+        top_scenarios.append(row_data)
+
+    # Prepare customdata: [n, top_scenarios_as_html]
+    custom_data = np.dstack([n_mat.values, np.array(top_scenarios)]).reshape(
+        n_mat.shape[0], n_mat.shape[1], 2
+    )
+
+    # Heatmap
+    fig_heat = go.Figure(
+        data=go.Heatmap(
+            z=z_plot.values,
+            x=z_plot.columns.tolist(),
+            y=z_plot.index.tolist(),
+            coloraxis="coloraxis",
+            zmin=zmin,
+            zmax=zmax,
+            text=text_vals,
+            texttemplate=texttemplate,
+            hovertemplate=(
+                "Likelihood=%{x}<br>"
+                "Impact=%{y}<br>"
+                "Scenarios: %{customdata[0]}<br>"
+                f"{metric_type}: $%{{z:,.0f}}<br>"
+                "Top Scenarios:<br>"
+                "%{customdata[1]}<extra></extra>"
+            ),
+            customdata=custom_data,
+        )
+    )
     fig_heat.update_layout(
-        title="Likelihood × Impact (cell color = mean p95 loss)",
+        title="Likelihood × Impact (cell color = p95; toggle Mean/Total above)",
         xaxis_title="Likelihood",
         yaxis_title="Impact",
         height=420,
         margin=dict(l=20, r=20, t=50, b=40),
         coloraxis=dict(colorscale="YlOrRd"),
     )
-    st.plotly_chart(fig_heat, use_container_width=True, key="plot_risk_heatmap")
+
+    st.plotly_chart(
+        fig_heat,
+        use_container_width=True,
+        key=f"plot_risk_heatmap_{domain_choice}_{len(selected_scenarios)}_{int(show_labels)}_{int(boost_contrast)}_{metric_type.replace(' ', '_')}",
+    )
 
     # ---------- Downloads ----------
     st.subheader("Export")
@@ -416,6 +536,11 @@ if st.session_state.run:
             "domain": domain_choice,
             "scenarios": selected_scenarios,
         },
+        "risk_matrix": {
+            "metric_type": metric_type,
+            "boost_contrast": bool(boost_contrast),
+            "show_labels": bool(show_labels),
+        },
     }
     colB.download_button(
         "📑 Download Run Manifest (JSON)",
@@ -423,6 +548,5 @@ if st.session_state.run:
         file_name="run_manifest.json",
         mime="application/json",
     )
-
 else:
     st.info("Set parameters in the sidebar and click **Run Simulation** to generate results.")
