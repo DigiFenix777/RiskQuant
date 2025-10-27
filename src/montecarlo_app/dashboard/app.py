@@ -154,6 +154,7 @@ if st.session_state.run:
 
     df_params_filtered = df_params_filtered[df_params_filtered["Risk_ID"].isin(selected_scenarios)]
 
+
     # ---------- Simulation ----------
     port_samples, per_scn = simulate_portfolio(
         df_params_filtered, n_sims=int(n_sims), seed=int(seed)
@@ -172,6 +173,39 @@ if st.session_state.run:
     else:
         k3.metric("p90 Loss", f"${stats.get('p90', 0):,.0f}")
     k4.metric("Max Observed", f"${stats['max']:,.0f}")
+
+    # ---------- Quick Insights Summary ----------
+    st.markdown("### 💡 Quick Insights")
+
+    # Build per-scenario stats DataFrame defensively from `per_scn`
+    try:
+        if isinstance(per_scn, pd.DataFrame):
+            df_stats = per_scn.copy()
+        else:
+            df_stats = pd.DataFrame(per_scn)
+    except Exception:
+        df_stats = pd.DataFrame()
+
+    # Identify the most severe scenario (by p95), if available
+    if not df_stats.empty and {"Risk_ID", "p95"}.issubset(df_stats.columns):
+        # Ensure numeric p95 for idxmax
+        p95_series = pd.to_numeric(df_stats["p95"], errors="coerce").fillna(0)
+        idx = p95_series.idxmax()
+        most_severe_id = str(df_stats.loc[idx, "Risk_ID"])
+    else:
+        most_severe_id = "N/A"
+
+    total_scenarios = int(len(df_params_filtered))
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Scenarios Simulated", f"{total_scenarios}")
+    c2.metric("EAL (mean)", f"${stats['mean']:,.0f}")
+    c3.metric("Portfolio p95", f"${stats.get('p95', 0):,.0f}")
+    c4.metric("Most Severe", most_severe_id)
+
+    st.caption(
+        "EAL = Expected Annual Loss. p95 = 95th percentile annual loss across all simulated scenarios."
+    )
 
     # ---------- Histogram (Portfolio Loss) ----------
     fig_hist = go.Figure()
