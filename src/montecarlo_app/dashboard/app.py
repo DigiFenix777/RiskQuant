@@ -175,6 +175,64 @@ if st.session_state.run:
     k4.metric("Max Observed", f"${stats['max']:,.0f}")
 
     # ---------- Histogram (Portfolio Loss) ----------
+    # State to control the insights expander
+    st.session_state.setdefault("show_hist_insights", False)
+
+    # Header row with title + right-aligned Data Insights button
+    hcol1, hcol2 = st.columns([1, 0.3])
+    with hcol1:
+        st.markdown("## 🏦 Portfolio Annual Loss Distribution")
+    with hcol2:
+        if st.button("ℹ️ Data Insights", key="hist_insights_btn"):
+            st.session_state.show_hist_insights = not st.session_state.show_hist_insights
+
+    # Optional insights expander (native Streamlit)
+    if st.session_state.get("show_hist_insights", False):
+        with st.expander("🧠 Data Insights — Portfolio Annual Loss Distribution", expanded=True):
+            _mean = f"${stats.get('mean', 0):,.0f}"
+            _median = f"${stats.get('median', 0):,.0f}"
+            _p95 = f"${stats.get('p95', 0):,.0f}"
+            _max = f"${stats.get('max', 0):,.0f}"
+
+            st.markdown("#### What it is")
+            st.write(
+                "Distribution of **annualized portfolio loss** from Monte Carlo simulations. "
+                "Each bar shows how often a loss value appears across all runs."
+            )
+
+            st.markdown("#### Who it’s for")
+            st.write(
+                "Cyber risk analysts, managers, and decision-makers who need a quick view of "
+                "typical vs. tail losses to inform risk appetite, budgeting, and control decisions."
+            )
+
+            st.markdown("#### How to use it")
+            st.write(
+                "Compare **central tendency** (EAL, Median) with **tail percentiles** (e.g., p95). "
+                "Use this to set thresholds, evaluate controls or insurance, and communicate exposure."
+            )
+
+            st.markdown("#### Definitions")
+            st.markdown(
+                f"""
+    - **EAL (mean):** Expected Annual Loss — arithmetic average of simulated annual losses. **Current:** **{_mean}**
+    - **Median:** 50th percentile — half of simulated outcomes are at or below this value. **Current:** **{_median}**
+    - **p95 Loss:** 95th percentile — tail risk indicator; 95% of outcomes are ≤ this number. **Current:** **{_p95}**
+    - **Max Observed:** Largest annual loss observed in the simulated sample. **Current:** **{_max}**
+                """
+            )
+
+            st.info(
+                "💡 **Tips**\n\n"
+                "- Adjust simulation runs, percentiles, and scenario filters to see how the distribution and tail change.\n"
+                "- Compare baseline vs. with-control scenarios to demonstrate reduction in tail risk.\n"
+                "- Use the p95 to discuss tail exposure with leadership; use EAL for budgeting."
+            )
+
+            st.button("Close", key="hist_insights_close_btn",
+                      on_click=lambda: st.session_state.update(show_hist_insights=False))
+
+    # Build the histogram (unchanged)
     fig_hist = go.Figure()
     fig_hist.add_histogram(
         x=port_samples,
@@ -189,58 +247,23 @@ if st.session_state.run:
         if pval is not None:
             fig_hist.add_shape(
                 type="line",
-                x0=pval, x1=pval,
-                y0=0, y1=1,
-                yref="paper",
+                x0=pval, x1=pval, y0=0, y1=1, yref="paper",
                 line=dict(width=2, dash="dot"),
             )
             fig_hist.add_annotation(
                 x=pval, y=1, yref="paper",
                 text=f"p{p}: ${pval:,.0f}",
-                showarrow=False,
-                xanchor="left", yanchor="bottom",
+                showarrow=False, xanchor="left", yanchor="bottom",
             )
     fig_hist.update_layout(
-        title="🏦 Portfolio Annual Loss Distribution",
+        title=None,  # title handled by header row
         xaxis_title=f"Annual Loss ({currency})",
         yaxis_title="Frequency",
         bargap=0.05,
         height=420,
-        margin=dict(l=20, r=20, t=50, b=40),
+        margin=dict(l=20, r=20, t=20, b=40),
     )
     st.plotly_chart(fig_hist, use_container_width=True, key="plot_portfolio_hist")
-
-    # ---------- CDF (Portfolio) ----------
-    sorted_losses = np.sort(port_samples)
-    cdf = np.arange(1, len(sorted_losses) + 1) / len(sorted_losses)
-    fig_cdf = go.Figure()
-    fig_cdf.add_trace(go.Scatter(
-        x=sorted_losses,
-        y=cdf,
-        mode="lines",
-        name="CDF",
-        hovertemplate="P(Loss ≤ $%{x:,.0f}) = %{y:.1%}<extra></extra>",
-    ))
-    for p in show_percentiles:
-        pval = stats.get(f"p{p}")
-        if pval is not None:
-            fig_cdf.add_trace(go.Scatter(
-                x=[pval], y=[p / 100],
-                mode="markers+text",
-                text=[f"p{p}"],
-                textposition="top center",
-                marker=dict(size=8),
-                showlegend=False,
-                hovertemplate=f"p{p}: $%{{x:,.0f}}<extra></extra>",
-            ))
-    fig_cdf.update_layout(
-        title="📈 Cumulative Probability (CDF)",
-        xaxis_title=f"Loss Threshold ({currency})",
-        yaxis_title="Probability",
-        height=420,
-        margin=dict(l=20, r=20, t=50, b=40),
-    )
-    st.plotly_chart(fig_cdf, use_container_width=True, key="plot_portfolio_cdf")
 
     # ---------- Scenario Comparison (Box / Violin) ----------
     st.subheader("🎯 Scenario Comparison (Distribution by Scenario)")
