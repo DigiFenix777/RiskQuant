@@ -2,7 +2,7 @@
 Streamlit MVP — Cyber Risk Simulation Dashboard
 - Loads your Excel risk register via existing ETL helpers
 - Derives parameters, simulates portfolio
-- Shows KPI cards + Histogram + CDF
+- Shows KPI cards + Histogram + CDF + Scenario Comparison + Risk Matrix
 - Exports CSV of portfolio samples and run manifest JSON
 
 Run locally:
@@ -20,6 +20,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
+
+
+# ---------- UI: Page Setup ----------
+st.set_page_config(page_title="Cyber Risk Simulation Dashboard", layout="wide")
+st.title("📊 Cyber Risk Simulation Dashboard")
+st.caption("Quantify annual cyber loss with Monte Carlo. Adjust assumptions and see impact instantly.")
 
 # Ensure we can import from src/
 ROOT = Path(__file__).resolve().parents[3]  # .../RiskQuant
@@ -39,12 +45,8 @@ from montecarlo_app.etl.risk_register_loader import (  # noqa: E402
 from montecarlo_app.model.monte_carlo import (  # noqa: E402
     simulate_portfolio,
     summarize,
+    simulate_scenario_row,
 )
-
-# ---------- UI: Header ----------
-st.set_page_config(page_title="Cyber Risk Simulation Dashboard", layout="wide")
-st.title("📊 Cyber Risk Simulation Dashboard")
-st.caption("Quantify annual cyber loss with Monte Carlo. Adjust assumptions and see impact instantly.")
 
 # ---------- Sidebar Controls ----------
 with st.sidebar:
@@ -55,50 +57,41 @@ with st.sidebar:
 
     n_sims = st.number_input(
         "Number of Simulations",
-        min_value=1000,
-        max_value=200000,
-        value=int(settings["simulation"]["runs"]),
-        step=1000,
+        min_value=1000, max_value=200000,
+        value=int(settings["simulation"]["runs"]), step=1000,
     )
-
     seed = st.number_input(
         "Random Seed",
-        min_value=0,
-        max_value=10**7,
-        value=int(settings["simulation"]["seed"]),
-        step=1,
+        min_value=0, max_value=10**7,
+        value=int(settings["simulation"]["seed"]), step=1,
     )
-
     show_percentiles = st.multiselect(
         "Percentiles to Show",
         options=[50, 90, 95, 99],
         default=settings["simulation"]["percentiles"],
     )
-
     currency = st.selectbox("Currency", options=["USD"], index=0)
 
     st.divider()
     st.header("ℹ️ About")
     st.info(
-        "Monte Carlo simulates thousands of risk outcomes to estimate "
-        "expected and tail losses. Use the controls above to adjust parameters."
+        "Monte Carlo simulates thousands of risk outcomes to estimate expected and tail losses. "
+        "Use the controls above to adjust parameters."
     )
 
     # --- Stateful run/reset controls ---
     if "run" not in st.session_state:
         st.session_state.run = False
-
     if st.button("▶ Run Simulation", type="primary"):
         st.session_state.run = True
-
     if st.button("↺ Reset", type="secondary"):
         st.session_state.run = False
 
 
-# ---------- Load + Prepare Data (on demand) ----------
+# ---------- Data Prep (cached) ----------
 @st.cache_data(show_spinner=False)
-def _prepare_params():
-    df_raw = load_risk_register(settings)
+def _prepare_params(_settings) -> pd.DataFrame:
+    df_raw = load_risk_register(_settings)
     validate_required_columns(df_raw)
     df = normalize_columns(df_raw)
     _issues = validate_and_clean_values(df)
@@ -108,37 +101,146 @@ def _prepare_params():
     # Derive Category from Risk_ID prefix (e.g., GOV-01 -> GOV)
     df_params = df_params.copy()
     df_params["Category"] = df_params["Risk_ID"].astype(str).str.split("-").str[0]
+
+    # Ensure numeric dtypes for MC parameter columns (FutureWarning-safe)
+    for col in ["Lambda_Min", "Lambda_Mode", "Lambda_Max", "Loss_Min", "Loss_Mode", "Loss_Max"]:
+        if col in df_params.columns:
+            df_params[col] = pd.to_numeric(df_params[col], errors="coerce")
     return df_params
 
-# ---------- Load + Prepare Data (on demand) ----------
-@st.cache_data(show_spinner=False)
-def _prepare_params():
-    df_raw = load_risk_register(settings)
-    validate_required_columns(df_raw)
-    df = normalize_columns(df_raw)
-    _issues = validate_and_clean_values(df)
-    maps = load_mappings()
-    df_params = derive_parameters(df, maps)
 
-    # Derive Category from Risk_ID prefix (e.g., GOV-01 -> GOV)
-    df_params = df_params.copy()
-    df_params["Category"] = df_params["Risk_ID"].astype(str).str.split("-").str[0]
-    return df_params
+# ---------- Helper: normalize per_scn into standard shapes ----------
+def normalize_per_scn(per_scn_obj):
+    """
+    Normalize per_scn into one (or both) canonical forms:
+      A) Samples DF:  columns ['Risk_ID', 'Annual_Loss']
+      B) Summary DF:  columns ['Risk_ID', 'mean', 'median', 'p95']
+    Handles: dicts, lists/tuples of (rid, samples), DataFrames with varied col names,
+             dict values that are dicts (e.g., {'samples': [...]}), numpy arrays.
+    """
 
-# ---------- Simulation + Results ----------
+    empty_samples = pd.DataFrame(columns=["Risk_ID", "Annual_Loss"])
+    empty_summary = pd.DataFrame(columns=["Risk_ID", "mean", "median", "p95"])
+
+    if per_scn_obj is None:
+        return empty_samples, empty_summary
+
+    # -------- Case: dict ----------
+    if isinstance(per_scn_obj, dict):
+        rows = []
+        sum_rows = []
+        for rid, val in per_scn_obj.items():
+            rid = str(rid)
+            # val might be: array-like, dict with 'samples', dict with stats, etc.
+            if isinstance(val, dict):
+                # samples?
+                if "samples" in val and val["samples"] is not None:
+                    arr = np.asarray(val["samples"]).flatten()
+                    rows.extend([(rid, float(v)) for v in arr])
+                # summary?
+                has_stats = any(k in val for k in ("mean", "median", "p95"))
+                if has_stats:
+                    mean = float(val.get("mean", np.nan))
+                    median = float(val.get("median", np.nan))
+                    p95 = float(val.get("p95", np.nan))
+                    sum_rows.append((rid, mean, median, p95))
+            else:
+                # assume array-like samples
+                arr = np.asarray(val).flatten()
+                rows.extend([(rid, float(v)) for v in arr])
+
+        samples_df = pd.DataFrame(rows, columns=["Risk_ID", "Annual_Loss"]) if rows else empty_samples
+        summary_df = pd.DataFrame(sum_rows, columns=["Risk_ID", "mean", "median", "p95"]) if sum_rows else empty_summary
+        # dtype hygiene
+        if not samples_df.empty:
+            samples_df["Annual_Loss"] = pd.to_numeric(samples_df["Annual_Loss"], errors="coerce")
+        if not summary_df.empty:
+            for c in ["mean", "median", "p95"]:
+                summary_df[c] = pd.to_numeric(summary_df[c], errors="coerce")
+        return samples_df, summary_df
+
+    # -------- Case: list/tuple of (rid, samples|dict) ----------
+    if isinstance(per_scn_obj, (list, tuple)):
+        rows = []
+        sum_rows = []
+        for item in per_scn_obj:
+            if not isinstance(item, (list, tuple)) or len(item) < 2:
+                continue
+            rid, val = item[0], item[1]
+            rid = str(rid)
+            if isinstance(val, dict):
+                if "samples" in val and val["samples"] is not None:
+                    arr = np.asarray(val["samples"]).flatten()
+                    rows.extend([(rid, float(v)) for v in arr])
+                has_stats = any(k in val for k in ("mean", "median", "p95"))
+                if has_stats:
+                    mean = float(val.get("mean", np.nan))
+                    median = float(val.get("median", np.nan))
+                    p95 = float(val.get("p95", np.nan))
+                    sum_rows.append((rid, mean, median, p95))
+            else:
+                arr = np.asarray(val).flatten()
+                rows.extend([(rid, float(v)) for v in arr])
+
+        samples_df = pd.DataFrame(rows, columns=["Risk_ID", "Annual_Loss"]) if rows else empty_samples
+        summary_df = pd.DataFrame(sum_rows, columns=["Risk_ID", "mean", "median", "p95"]) if sum_rows else empty_summary
+        if not samples_df.empty:
+            samples_df["Annual_Loss"] = pd.to_numeric(samples_df["Annual_Loss"], errors="coerce")
+        if not summary_df.empty:
+            for c in ["mean", "median", "p95"]:
+                summary_df[c] = pd.to_numeric(summary_df[c], errors="coerce")
+        return samples_df, summary_df
+
+    # -------- Case: DataFrame (samples or summary, with varied column names) ----------
+    if isinstance(per_scn_obj, pd.DataFrame):
+        df = per_scn_obj.copy()
+        # unify names
+        rename_map = {}
+        for c in df.columns:
+            lc = str(c).lower()
+            if lc in ("scenario", "riskid", "risk_id"):
+                rename_map[c] = "Risk_ID"
+            elif lc in ("loss", "annual_loss", "loss_usd", "value"):
+                rename_map[c] = "Annual_Loss"
+        if rename_map:
+            df = df.rename(columns=rename_map)
+
+        cols = set(df.columns)
+        # samples form
+        if {"Risk_ID", "Annual_Loss"}.issubset(cols):
+            df["Risk_ID"] = df["Risk_ID"].astype(str)
+            df["Annual_Loss"] = pd.to_numeric(df["Annual_Loss"], errors="coerce")
+            return df, empty_summary
+        # summary form
+        need = {"Risk_ID", "mean", "median", "p95"}
+        if need.issubset(cols):
+            out = df[list(need)].copy()
+            out["Risk_ID"] = out["Risk_ID"].astype(str)
+            for c in ["mean", "median", "p95"]:
+                out[c] = pd.to_numeric(out[c], errors="coerce")
+            return empty_samples, out
+
+    # Fallback
+    return empty_samples, empty_summary
+
+
+
+# =====================================================================
+# ======================== Simulation + Results =======================
+# =====================================================================
 if st.session_state.run:
-    # Prepare parameters (cached by _prepare_params)
-    df_params = _prepare_params()
+    # Prepare parameters (cached)
+    df_params = _prepare_params(settings)
 
     # --- Filters (Domain / Scenarios) ---
     domain_options = ["All"] + sorted(df_params["Category"].dropna().unique().tolist())
     col_f1, col_f2 = st.columns([1, 3])
     domain_choice = col_f1.selectbox("Domain", options=domain_options, index=0, key="filter_domain")
 
-    if domain_choice != "All":
-        df_params_filtered = df_params[df_params["Category"] == domain_choice].copy()
-    else:
-        df_params_filtered = df_params.copy()
+    df_params_filtered = (
+        df_params[df_params["Category"] == domain_choice].copy()
+        if domain_choice != "All" else df_params.copy()
+    )
 
     scenario_options = df_params_filtered["Risk_ID"].tolist()
     selected_scenarios = col_f2.multiselect(
@@ -147,18 +249,44 @@ if st.session_state.run:
         default=scenario_options,
         key="filter_scenarios",
     )
-
     if not selected_scenarios:
         st.warning("No scenarios selected for this domain. Select at least one.")
         st.stop()
-
     df_params_filtered = df_params_filtered[df_params_filtered["Risk_ID"].isin(selected_scenarios)]
-
 
     # ---------- Simulation ----------
     port_samples, per_scn = simulate_portfolio(
         df_params_filtered, n_sims=int(n_sims), seed=int(seed)
     )
+    per_samples, per_summary = normalize_per_scn(per_scn)
+
+    # --- Developer diagnostics (temporary; remove later) ---
+    with st.expander("🧪 Developer diagnostics (temporary)", expanded=False):
+        st.write("type(per_scn):", type(per_scn).__name__)
+        try:
+            if isinstance(per_scn, dict):
+                keys_preview = list(per_scn.keys())[:5]
+                st.write("per_scn dict keys (preview):", keys_preview)
+                if keys_preview:
+                    st.write("example value type:", type(per_scn[keys_preview[0]]).__name__)
+            elif isinstance(per_scn, (list, tuple)):
+                st.write("per_scn len:", len(per_scn))
+                if len(per_scn) > 0:
+                    st.write("first item type:", type(per_scn[0]).__name__)
+            elif isinstance(per_scn, pd.DataFrame):
+                st.write("per_scn df shape:", per_scn.shape)
+                st.dataframe(per_scn.head())
+            else:
+                st.write("per_scn preview:", str(per_scn)[:200])
+        except Exception as e:
+            st.write("diagnostics error:", repr(e))
+
+        st.write("per_samples shape:", per_samples.shape)
+        if not per_samples.empty:
+            st.dataframe(per_samples.head())
+        st.write("per_summary shape:", per_summary.shape)
+        if not per_summary.empty:
+            st.dataframe(per_summary.head())
 
     # ---------- Summary stats ----------
     stats = summarize(port_samples)
@@ -167,18 +295,14 @@ if st.session_state.run:
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("EAL (mean)", f"${stats['mean']:,.0f}")
     k2.metric("Median", f"${stats['median']:,.0f}")
-    # Prefer p95 if selected; else show p90
-    if 95 in show_percentiles:
-        k3.metric("p95 Loss", f"${stats['p95']:,.0f}")
-    else:
-        k3.metric("p90 Loss", f"${stats.get('p90', 0):,.0f}")
+    k3.metric("p95 Loss" if 95 in show_percentiles else "p90 Loss",
+              f"${stats['p95' if 95 in show_percentiles else 'p90']:,.0f}")
     k4.metric("Max Observed", f"${stats['max']:,.0f}")
 
-    # ---------- Histogram (Portfolio Loss) ----------
-    # State to control the insights expander
+    # -----------------------------------------------------------------
+    # Histogram (Portfolio Loss) + Insights
+    # -----------------------------------------------------------------
     st.session_state.setdefault("show_hist_insights", False)
-
-    # Header row with title + right-aligned Data Insights button
     hcol1, hcol2 = st.columns([1, 0.3])
     with hcol1:
         st.markdown("## 🏦 Portfolio Annual Loss Distribution")
@@ -186,7 +310,6 @@ if st.session_state.run:
         if st.button("ℹ️ Data Insights", key="hist_insights_btn"):
             st.session_state.show_hist_insights = not st.session_state.show_hist_insights
 
-    # Optional insights expander (native Streamlit)
     if st.session_state.get("show_hist_insights", False):
         with st.expander("🧠 Data Insights — Portfolio Annual Loss Distribution", expanded=True):
             _mean = f"${stats.get('mean', 0):,.0f}"
@@ -199,345 +322,423 @@ if st.session_state.run:
                 "Distribution of **annualized portfolio loss** from Monte Carlo simulations. "
                 "Each bar shows how often a loss value appears across all runs."
             )
-
             st.markdown("#### Who it’s for")
             st.write(
                 "Cyber risk analysts, managers, and decision-makers who need a quick view of "
                 "typical vs. tail losses to inform risk appetite, budgeting, and control decisions."
             )
-
             st.markdown("#### How to use it")
             st.write(
                 "Compare **central tendency** (EAL, Median) with **tail percentiles** (e.g., p95). "
                 "Use this to set thresholds, evaluate controls or insurance, and communicate exposure."
             )
-
             st.markdown("#### Definitions")
             st.markdown(
                 f"""
-    - **EAL (mean):** Expected Annual Loss — arithmetic average of simulated annual losses. **Current:** **{_mean}**
-    - **Median:** 50th percentile — half of simulated outcomes are at or below this value. **Current:** **{_median}**
-    - **p95 Loss:** 95th percentile — tail risk indicator; 95% of outcomes are ≤ this number. **Current:** **{_p95}**
-    - **Max Observed:** Largest annual loss observed in the simulated sample. **Current:** **{_max}**
+- **EAL (mean):** Expected Annual Loss — arithmetic average of simulated annual losses. **Current:** **{_mean}**
+- **Median:** 50th percentile — half of simulated outcomes are at or below this value. **Current:** **{_median}**
+- **p95 Loss:** 95th percentile — tail risk indicator; 95% of outcomes are ≤ this number. **Current:** **{_p95}**
+- **Max Observed:** Largest annual loss observed in the simulated sample. **Current:** **{_max}**
                 """
             )
-
             st.info(
                 "💡 **Tips**\n\n"
                 "- Adjust simulation runs, percentiles, and scenario filters to see how the distribution and tail change.\n"
                 "- Compare baseline vs. with-control scenarios to demonstrate reduction in tail risk.\n"
                 "- Use the p95 to discuss tail exposure with leadership; use EAL for budgeting."
             )
-
             st.button("Close", key="hist_insights_close_btn",
                       on_click=lambda: st.session_state.update(show_hist_insights=False))
 
-    # Build the histogram (unchanged)
     fig_hist = go.Figure()
     fig_hist.add_histogram(
-        x=port_samples,
-        nbinsx=50,
-        name="Portfolio Loss",
-        histnorm=None,
+        x=port_samples, nbinsx=50, name="Portfolio Loss", histnorm=None,
         hovertemplate="Annual Loss: $%{x:,.0f}<extra></extra>",
     )
-    # Percentile lines
     for p in show_percentiles:
         pval = stats.get(f"p{p}")
         if pval is not None:
             fig_hist.add_shape(
-                type="line",
-                x0=pval, x1=pval, y0=0, y1=1, yref="paper",
+                type="line", x0=pval, x1=pval, y0=0, y1=1, yref="paper",
                 line=dict(width=2, dash="dot"),
             )
             fig_hist.add_annotation(
                 x=pval, y=1, yref="paper",
-                text=f"p{p}: ${pval:,.0f}",
-                showarrow=False, xanchor="left", yanchor="bottom",
+                text=f"p{p}: ${pval:,.0f}", showarrow=False, xanchor="left", yanchor="bottom",
             )
     fig_hist.update_layout(
-        title=None,  # title handled by header row
-        xaxis_title=f"Annual Loss ({currency})",
-        yaxis_title="Frequency",
-        bargap=0.05,
-        height=420,
-        margin=dict(l=20, r=20, t=20, b=40),
+        title=None, xaxis_title=f"Annual Loss ({currency})", yaxis_title="Frequency",
+        bargap=0.05, height=420, margin=dict(l=20, r=20, t=20, b=40),
     )
     st.plotly_chart(fig_hist, use_container_width=True, key="plot_portfolio_hist")
 
-    # ---------- Scenario Comparison (Box / Violin) ----------
+    # -----------------------------------------------------------------
+    # CDF (Portfolio) + Insights
+    # -----------------------------------------------------------------
+    st.session_state.setdefault("show_cdf_insights", False)
+    c1, c2 = st.columns([1, 0.3])
+    with c1:
+        st.markdown("## 📈 Cumulative Probability (CDF)")
+    with c2:
+        if st.button("ℹ️ Data Insights", key="cdf_insights_btn"):
+            st.session_state.show_cdf_insights = not st.session_state.show_cdf_insights
+
+    if st.session_state.get("show_cdf_insights", False):
+        with st.expander("🧠 Data Insights — Cumulative Probability (CDF)", expanded=True):
+            _median = f"${stats.get('median', 0):,.0f}"
+            _p90 = stats.get("p90"); _p95 = stats.get("p95")
+            _p90_s = f"${_p90:,.0f}" if _p90 is not None else "—"
+            _p95_s = f"${_p95:,.0f}" if _p95 is not None else "—"
+            _plist = ", ".join([f"p{int(p)}" for p in show_percentiles])
+
+            st.markdown("#### What it is")
+            st.write(
+                "The **Cumulative Distribution Function (CDF)** shows the probability that annual loss will be "
+                "**≤ a given threshold**. Right = larger losses; up = higher probability."
+            )
+            st.markdown("#### Who it’s for")
+            st.write("Analysts & leaders setting **risk appetite** and **budget thresholds**, and discussing **tail risk**.")
+            st.markdown("#### How to use it")
+            st.write(
+                "Pick a threshold on the x-axis and read up to get **P(Loss ≤ threshold)**. "
+                "Or pick a probability (e.g., 95%), read left to the curve, then down to the **loss at that confidence**."
+            )
+            st.markdown("#### Definitions")
+            st.markdown(
+                f"""
+- **Median (p50):** 50% of outcomes are ≤ this value. **Current:** **{_median}**
+- **p90:** 90% of outcomes are ≤ this value (conservative budgeting). **Current:** **{_p90_s}**
+- **p95:** 95% of outcomes are ≤ this value (tail-risk marker). **Current:** **{_p95_s}**
+- **Displayed percentiles:** {_plist or "—"}
+                """
+            )
+            st.info(
+                "💡 **Tips**\n\n"
+                "- Use **p95** for tail exposure with leadership; **Median/EAL** for expected outcomes.\n"
+                "- Steeper curve near your threshold ⇒ small control changes can materially change risk.\n"
+                "- Compare baseline vs. with-control CDFs to show tail-risk reduction."
+            )
+            st.button("Close", key="cdf_insights_close_btn",
+                      on_click=lambda: st.session_state.update(show_cdf_insights=False))
+
+    sorted_losses = np.sort(port_samples)
+    cdf = np.arange(1, len(sorted_losses) + 1) / len(sorted_losses)
+    fig_cdf = go.Figure()
+    fig_cdf.add_trace(go.Scatter(
+        x=sorted_losses, y=cdf, mode="lines", name="CDF",
+        hovertemplate="P(Loss ≤ $%{x:,.0f}) = %{y:.1%}<extra></extra>",
+    ))
+    for p in show_percentiles:
+        pval = stats.get(f"p{p}")
+        if pval is not None:
+            fig_cdf.add_trace(go.Scatter(
+                x=[pval], y=[p / 100], mode="markers+text",
+                text=[f"p{p}"], textposition="top center",
+                marker=dict(size=8), showlegend=False,
+                hovertemplate=f"p{p}: $%{{x:,.0f}}<extra></extra>",
+            ))
+    fig_cdf.update_layout(
+        title=None, xaxis_title=f"Loss Threshold ({currency})", yaxis_title="Probability",
+        height=420, margin=dict(l=20, r=20, t=20, b=40),
+    )
+    st.plotly_chart(
+        fig_cdf, use_container_width=True,
+        key=f"plot_portfolio_cdf_{domain_choice}_{len(selected_scenarios)}_{int(st.session_state.get('show_cdf_insights', False))}",
+    )
+
+    # ---------- Scenario Comparison (Distribution by Scenario) ----------
     st.subheader("🎯 Scenario Comparison (Distribution by Scenario)")
 
-    # Helper: downsample for plotting only (keep charts responsive)
-    def _downsample_for_viz(df, group_col="Risk_ID", n_per_group=2000, seed=42):
-        if len(df) == 0:
-            return df
-        return (
-            df.groupby(group_col, group_keys=False)
-            .apply(lambda g: g.sample(min(len(g), n_per_group), random_state=seed))
-            .reset_index(drop=True)
+    # Controls row
+    col_ctrl1, col_ctrl2, col_ctrl3 = st.columns([0.45, 0.35, 0.20])
+
+    # Current samples/summary availability
+    has_samples = not per_samples.empty
+
+    # If no row-level samples, offer fast local generation to enable Box/Violin
+    if not has_samples:
+        st.markdown(
+            "> ℹ️ No row-level samples were returned by the simulator. "
+            "You can generate per-scenario samples (fast) to enable Box/Violin."
         )
+        gen_col1, gen_col2 = st.columns([0.5, 0.5])
+        with gen_col1:
+            enable_local_sampling = st.checkbox(
+                "Generate per-scenario samples (approx.)",
+                value=False,
+                help="Uses current parameters to sample each scenario locally so Box/Violin can render.",
+                key="comp_enable_local_sampling",
+            )
+        with gen_col2:
+            local_nsims = st.slider(
+                "Samples per scenario",
+                min_value=1000,
+                max_value=min(int(n_sims), 20000),
+                value=min(5000, int(n_sims)),
+                step=500,
+                key="comp_local_nsims",
+                disabled=not enable_local_sampling,
+            )
 
-    # Build per-scenario samples and stats
-    from montecarlo_app.model.monte_carlo import simulate_scenario_row, summarize as _scn_summarize
-    rng = np.random.default_rng(int(seed))
-    long_rows = []
-    per_scenario_stats = []
+        if enable_local_sampling:
+            # 1) Generate samples (Risk_ID, Annual_Loss)
+            rows = []
+            for _, r in df_params_filtered.iterrows():
+                arr = simulate_scenario_row(r, n_sims=int(local_nsims), seed=int(seed))
+                rid = str(r["Risk_ID"])
+                rows.extend([(rid, float(v)) for v in arr])
+            per_samples = pd.DataFrame(rows, columns=["Risk_ID", "Annual_Loss"])
 
-    for _, row in df_params_filtered.iterrows():
-        scenario_seed = int(rng.integers(0, 2 ** 31 - 1))
-        samples_scn = simulate_scenario_row(row, n_sims=int(n_sims), seed=scenario_seed)
-        per_scenario_stats.append({
-            "Risk_ID": row["Risk_ID"],
-            "Category": row["Category"],
-            **_scn_summarize(samples_scn),
-        })
-        long_rows.append(pd.DataFrame({
-            "Risk_ID": row["Risk_ID"],
-            "Category": row["Category"],
-            "Annual_Loss": samples_scn,
-        }))
+            # 2) Merge labels so Category/Owner are present for coloring/hover
+            label_cols = ["Risk_ID"] + [c for c in ["Category", "Owner"] if c in df_params_filtered.columns]
+            labels = df_params_filtered[label_cols].drop_duplicates("Risk_ID")
+            per_samples = per_samples.merge(labels, on="Risk_ID", how="left")
 
-    df_long = pd.concat(long_rows, ignore_index=True) if long_rows else pd.DataFrame(
-        columns=["Risk_ID", "Category", "Annual_Loss"])
-    df_stats = pd.DataFrame(per_scenario_stats) if per_scenario_stats else pd.DataFrame(
-        columns=["Risk_ID", "Category", "mean", "median", "p90", "p95", "p99"])
+    # Re-evaluate after optional generation
+    has_samples = not per_samples.empty
 
-    # Persisted toggles for comparison
-    st.session_state.setdefault("scn_comp_type", "Box")
-    st.session_state.setdefault("scn_sort_metric", "p95")
-
-    comp_type = st.radio(
-        "Comparison Type",
-        options=["Box", "Violin"],
-        horizontal=True,
-        key="scn_comp_type",
+    # Comparison controls (always enabled to avoid sticky state)
+    comp_type = col_ctrl1.radio(
+        "Comparison Type", options=["Box", "Violin"], horizontal=True, index=0, key="comp_type_control",
     )
-    sort_metric = st.selectbox(
-        "Sort scenarios by",
-        options=["Risk_ID", "p95", "mean", "median"],
-        key="scn_sort_metric",
+    y_metric = col_ctrl2.selectbox(
+        "Metric (used when no samples → bar)",
+        options=["p95", "median", "mean"], index=0, key="comp_y_metric",
+    )
+    sort_metric = col_ctrl3.selectbox(
+        "Sort by",
+        options=["Risk_ID", "p95", "median", "mean"], index=0, key="comp_sort_metric",
     )
 
-    # Determine x-axis order
-    if not df_stats.empty:
-        if sort_metric == "Risk_ID":
-            order = sorted(df_stats["Risk_ID"].tolist())
+    # Build per-scenario stats from whatever we have
+    if has_samples:
+        df_stats_comp = (
+            per_samples.groupby("Risk_ID")["Annual_Loss"]
+            .agg(
+                mean="mean",
+                median="median",
+                p95=lambda s: np.percentile(s.dropna().values, 95) if s.notna().any() else np.nan,
+            )
+            .reset_index()
+        )
+    else:
+        df_stats_comp = per_summary.copy()
+
+    # Merge labels for color/hover
+    label_cols = ["Risk_ID"] + [c for c in ["Category", "Owner"] if c in df_params_filtered.columns]
+    labels = df_params_filtered[label_cols].drop_duplicates("Risk_ID")
+    df_stats_comp = df_stats_comp.merge(labels, on="Risk_ID", how="left")
+    df_samples_comp = per_samples.merge(labels, on="Risk_ID", how="left") if has_samples else pd.DataFrame()
+
+    # Sort order
+    if sort_metric in ["p95", "median", "mean"]:
+        order = (
+            df_stats_comp[["Risk_ID", sort_metric]]
+            .dropna(subset=[sort_metric])
+            .sort_values(by=sort_metric, ascending=False)["Risk_ID"]
+            .tolist()
+        )
+    else:
+        order = sorted(df_stats_comp["Risk_ID"].dropna().unique().tolist())
+
+    # Guard
+    if df_stats_comp.empty or df_stats_comp["Risk_ID"].isna().all():
+        st.warning("No per-scenario stats available to plot. Try running the simulation or broadening filters.")
+    else:
+        if has_samples and not df_samples_comp.empty:
+            # Box/Violin with row-level samples
+            dfp = df_samples_comp.dropna(subset=["Risk_ID", "Annual_Loss"]).copy()
+            dfp["Annual_Loss"] = pd.to_numeric(dfp["Annual_Loss"], errors="coerce")
+            if comp_type == "Box":
+                fig_comp = px.box(
+                    dfp,
+                    x="Risk_ID", y="Annual_Loss",
+                    color="Category" if "Category" in dfp.columns else None,
+                    category_orders={"Risk_ID": order},
+                    points=False,
+                )
+                fig_comp.update_traces(quartilemethod="inclusive")
+                y_label = "Annual Loss (USD)"
+            else:
+                fig_comp = px.violin(
+                    dfp,
+                    x="Risk_ID", y="Annual_Loss",
+                    color="Category" if "Category" in dfp.columns else None,
+                    category_orders={"Risk_ID": order},
+                    box=True, points=False,
+                )
+                y_label = "Annual Loss (USD)"
+            # Avoid undefined legend labels; only show legend if Category exists
+            fig_comp.update_traces(
+                name="Annual Loss", selector=dict(name=None),
+                showlegend=("Category" in dfp.columns),
+                hovertemplate="Scenario=%{x}<br>Loss=$%{y:,.0f}<extra></extra>",
+            )
         else:
-            order = df_stats.sort_values(sort_metric, ascending=True)["Risk_ID"].tolist()
-    else:
-        order = []
-
-    # Downsample for plotting
-    viz_rows = _downsample_for_viz(df_long, n_per_group=2000, seed=int(seed))
-    st.caption(f"Scenario Comparison shows {len(viz_rows):,} points (sampled from {len(df_long):,}).")
-
-    # Render comparison chart
-    if viz_rows.empty or not order:
-        st.warning(
-            "No data available to plot scenario distributions. Try selecting more scenarios or increasing simulations.")
-    else:
-        if comp_type == "Box":
-            fig_comp = px.box(
-                viz_rows,
-                x="Risk_ID",
-                y="Annual_Loss",
-                color="Category",
+            # No samples → bar of metric
+            dfp = df_stats_comp.dropna(subset=["Risk_ID", y_metric]).copy()
+            dfp[y_metric] = pd.to_numeric(dfp[y_metric], errors="coerce")
+            dfp = dfp.sort_values(by=y_metric, ascending=False, na_position="last")
+            fig_comp = px.bar(
+                dfp,
+                x="Risk_ID", y=y_metric,
+                color="Category" if "Category" in dfp.columns else None,
                 category_orders={"Risk_ID": order},
-                points=False,
             )
-        else:  # Violin
-            fig_comp = px.violin(
-                viz_rows,
-                x="Risk_ID",
-                y="Annual_Loss",
-                color="Category",
-                category_orders={"Risk_ID": order},
-                box=True,
-                points=False,
+            fig_comp.update_traces(
+                name=y_metric.upper(), selector=dict(name=None),
+                showlegend=("Category" in dfp.columns),
+                hovertemplate=f"Scenario=%{{x}}<br>{y_metric}=$%{{y:,.0f}}<extra></extra>",
             )
+            y_label = f"{y_metric} (USD)"
 
         fig_comp.update_layout(
-            title="Scenario Loss Distributions",
-            xaxis_title="Scenario (Risk_ID)",
-            yaxis_title=f"Annual Loss ({currency})",
-            height=480,
-            margin=dict(l=20, r=20, t=50, b=40),
-            legend_title_text="Category",
+            title="",
+            xaxis_title="Scenario",
+            yaxis_title=y_label,
+            height=420,
+            margin=dict(l=20, r=20, t=20, b=40),
         )
-        st.plotly_chart(fig_comp, use_container_width=True, key="plot_scenario_comp")
+        st.plotly_chart(
+            fig_comp,
+            use_container_width=True,
+            key=f"plot_comp_{'samples' if has_samples else 'summary'}_{comp_type}_{y_metric}_{domain_choice}_{len(selected_scenarios)}",
+        )
 
-    # ---------- Risk Matrix Heatmap ----------
-    st.subheader("🔥 Risk Matrix (Likelihood × Impact) — Colored by p95 Loss")
+    # ---------- Risk Matrix (Likelihood × Impact) ----------
+    st.subheader("🔥 Risk Matrix (Likelihood × Impact) — Colored by p95 Loss)")
 
-    # Cell metric toggle + readability options
-    col_metric, col_rm1, col_rm2 = st.columns([1, 1, 1])
-    metric_type = col_metric.radio(
-        "Cell metric",
-        options=["Mean p95", "Total p95"],
-        horizontal=True,
-        key="rm_metric_type",
+    # Build a per-scenario summary we can aggregate into cells
+    if not per_summary.empty:
+        df_stats_src = per_summary.copy()
+    else:
+        # derive from samples if needed
+        if not per_samples.empty:
+            df_stats_src = (
+                per_samples.groupby("Risk_ID")["Annual_Loss"]
+                .agg(
+                    mean="mean",
+                    median="median",
+                    p95=lambda s: np.percentile(s.dropna().values, 95) if s.notna().any() else np.nan,
+                )
+                .reset_index()
+            )
+        else:
+            df_stats_src = pd.DataFrame(columns=["Risk_ID", "mean", "median", "p95"])
+
+    # Merge Likelihood / Impact / Category for matrix + hover
+    merge_cols = ["Risk_ID"] + [c for c in ["Likelihood", "Impact", "Category"] if c in df_params_filtered.columns]
+    ctx = df_stats_src.merge(
+        df_params_filtered[merge_cols].drop_duplicates("Risk_ID"),
+        on="Risk_ID", how="left",
     )
-    show_labels = col_rm1.checkbox("Show labels (n & p95)", value=True, key="rm_show_labels")
-    boost_contrast = col_rm2.checkbox("Boost contrast (5–95% autoscale)", value=True, key="rm_boost_contrast")
 
-    # Merge stats back for Likelihood/Impact (and Owner for hover) context
-    merge_cols = ["Risk_ID", "Likelihood", "Impact"]
-    if "Owner" in df_params_filtered.columns:
-        merge_cols.append("Owner")
-
-    df_stats_ctx = df_stats.merge(
-        df_params_filtered[merge_cols],
-        on="Risk_ID",
-        how="left",
-    )
-
-    # Axis orders (keep consistent with your mappings)
+    # Fixed axis orders
     like_order = ["Very Low", "Low", "Medium", "High", "Critical"]
     imp_order = ["Low", "Medium", "High", "Critical"]
 
-    # Aggregate per (Likelihood, Impact)
-    if not df_stats_ctx.empty:
+    # Aggregate per cell
+    if not ctx.empty:
         grouped = (
-            df_stats_ctx
-            .groupby(["Likelihood", "Impact"], as_index=False)
+            ctx.groupby(["Likelihood", "Impact"], as_index=False)
             .agg(
                 p95_mean=("p95", "mean"),
                 p95_sum=("p95", "sum"),
                 n=("p95", "size"),
             )
         )
-        grouped["p95_total"] = grouped["p95_sum"]
-        grouped["p95_plot"] = grouped["p95_mean"] if metric_type == "Mean p95" else grouped["p95_total"]
     else:
-        grouped = pd.DataFrame(columns=["Likelihood", "Impact", "p95_mean", "p95_total", "n", "p95_plot"])
+        grouped = pd.DataFrame(columns=["Likelihood", "Impact", "p95_mean", "p95_sum", "n"])
 
-    # Ensure full grid coverage
+    # Choose metric shown (toggle mean vs total)
+    metric_type = st.radio(
+        "Cell metric", options=["Mean p95", "Total p95"], horizontal=True, index=0, key="rm_metric_type",
+    )
+    grouped["p95_plot"] = grouped["p95_mean"] if metric_type == "Mean p95" else grouped["p95_sum"]
+
+    # Full grid so empty combos render as blank
     grid = pd.MultiIndex.from_product([like_order, imp_order], names=["Likelihood", "Impact"]).to_frame(index=False)
-    matrix_full = grid.merge(grouped, on=["Likelihood", "Impact"], how="left").fillna({"p95_mean": 0, "p95_total": 0, "p95_plot": 0, "n": 0})
+    matrix_full = grid.merge(grouped, on=["Likelihood", "Impact"], how="left") \
+        .fillna({"p95_mean": 0, "p95_sum": 0, "p95_plot": 0, "n": 0})
 
-    # Pivot to matrices
-    z_mat = (
-        matrix_full
-        .pivot(index="Impact", columns="Likelihood", values="p95_plot")
-        .reindex(index=imp_order, columns=like_order)
-    )
-    n_mat = (
-        matrix_full
-        .pivot(index="Impact", columns="Likelihood", values="n")
-        .reindex(index=imp_order, columns=like_order)
-    )
+    # Pivot for heatmap
+    z_mat = (matrix_full.pivot(index="Impact", columns="Likelihood", values="p95_plot")
+             .reindex(index=imp_order, columns=like_order))
+    n_mat = (matrix_full.pivot(index="Impact", columns="Likelihood", values="n")
+             .reindex(index=imp_order, columns=like_order))
 
-    # Mask empty cells so they render blank (not “0 USD” color)
+    # Mask empty cells (avoid “0 USD” tiles)
     z_plot = z_mat.copy().astype(float)
     z_plot[n_mat.fillna(0).values == 0] = np.nan
 
-    # Optional contrast boost (clip to 5th–95th pct of non-empty)
-    valid_vals = z_plot.values[~np.isnan(z_plot.values)]
-    if valid_vals.size > 0 and boost_contrast:
-        zmin = float(np.percentile(valid_vals, 5))
-        zmax = float(np.percentile(valid_vals, 95))
-        if zmin == zmax:  # guard degenerate case
-            zmin = None
-            zmax = None
-    else:
-        zmin = None
-        zmax = None
+    # Optional contrast boost
+    boost_contrast = st.checkbox("Boost contrast", value=True, key="rm_boost_contrast")
 
-    # Optional labels inside cells (n + p95)
+    # Optional labels
+    show_labels = st.checkbox("Show labels", value=True, key="rm_show_labels")
     if show_labels:
-        def _fmt_cell(v, n):
+        def _fmt(v, n):
             if (n or 0) <= 0 or v is None or (isinstance(v, float) and np.isnan(v)):
                 return ""
-            # Show millions with 1 decimal (works for Mean or Total)
-            return f"n={int(n)}\n${v/1_000_000:,.1f}M"
+            return f"n={int(n)}\n${v / 1_000_000:,.1f}M"
+
 
         text_mat = z_plot.copy()
         for i in range(text_mat.shape[0]):
             for j in range(text_mat.shape[1]):
-                text_mat.iat[i, j] = _fmt_cell(z_plot.iat[i, j], n_mat.iat[i, j])
+                text_mat.iat[i, j] = _fmt(z_plot.iat[i, j], n_mat.iat[i, j])
         text_vals = text_mat.values
         texttemplate = "%{text}"
     else:
         text_vals = None
         texttemplate = None
 
-    # Build per-cell list of top 3 scenarios for hover
-    # (requires df_stats_ctx with Risk_ID, p95, and Owner if available)
-    top_scenarios = []
-    for imp in imp_order:
-        row_data = []
-        for like in like_order:
-            subset = df_stats_ctx.query("Impact == @imp and Likelihood == @like")
-            if subset.empty:
-                row_data.append("")
-            else:
-                cols = ["Risk_ID", "p95"]
-                owner_present = "Owner" in subset.columns
-                if owner_present:
-                    cols.append("Owner")
-                tops_df = subset.nlargest(3, "p95")[cols].copy()
-                # Format each scenario line
-                lines = []
-                for _, rr in tops_df.iterrows():
-                    rid = rr.get("Risk_ID", "")
-                    p95v = rr.get("p95", 0.0)
-                    if owner_present:
-                        owner = rr.get("Owner", "")
-                        line = f"{rid} ({owner}, ${p95v/1_000_000:.1f}M)"
-                    else:
-                        line = f"{rid} (${p95v/1_000_000:.1f}M)"
-                    lines.append(line)
-                row_data.append("<br>".join(lines))
-        top_scenarios.append(row_data)
+    # Color range clipping (contrast)
+    valid_vals = z_plot.values[~np.isnan(z_plot.values)]
+    zmin = zmax = None
+    if boost_contrast and valid_vals.size > 0:
+        lo, hi = float(np.percentile(valid_vals, 5)), float(np.percentile(valid_vals, 95))
+        if lo < hi:
+            zmin, zmax = lo, hi
 
-    # Prepare customdata: [n, top_scenarios_as_html]
-    custom_data = np.dstack([n_mat.values, np.array(top_scenarios)]).reshape(
-        n_mat.shape[0], n_mat.shape[1], 2
-    )
-
-    # Heatmap
+    # Render heatmap
     fig_heat = go.Figure(
         data=go.Heatmap(
             z=z_plot.values,
             x=z_plot.columns.tolist(),
             y=z_plot.index.tolist(),
             coloraxis="coloraxis",
-            zmin=zmin,
-            zmax=zmax,
-            text=text_vals,
-            texttemplate=texttemplate,
+            zmin=zmin, zmax=zmax,
+            text=text_vals, texttemplate=texttemplate,
             hovertemplate=(
                 "Likelihood=%{x}<br>"
                 "Impact=%{y}<br>"
                 "Scenarios: %{customdata[0]}<br>"
-                f"{metric_type}: $%{{z:,.0f}}<br>"
-                "Top Scenarios:<br>"
-                "%{customdata[1]}<extra></extra>"
+                f"{metric_type}: $%{{z:,.0f}}<extra></extra>"
             ),
-            customdata=custom_data,
+            customdata=np.dstack([n_mat.values]).reshape(n_mat.shape[0], n_mat.shape[1], 1),
         )
     )
     fig_heat.update_layout(
-        title="Likelihood × Impact (cell color = p95; toggle Mean/Total above)",
+        title="",
         xaxis_title="Likelihood",
         yaxis_title="Impact",
         height=420,
-        margin=dict(l=20, r=20, t=50, b=40),
+        margin=dict(l=20, r=20, t=20, b=40),
         coloraxis=dict(colorscale="YlOrRd"),
     )
-
     st.plotly_chart(
         fig_heat,
         use_container_width=True,
-        key=f"plot_risk_heatmap_{domain_choice}_{len(selected_scenarios)}_{int(show_labels)}_{int(boost_contrast)}_{metric_type.replace(' ', '_')}",
+        key=f"plot_risk_heatmap_{domain_choice}_{len(selected_scenarios)}_{metric_type.replace(' ', '_')}",
     )
 
-    # ---------- Downloads ----------
+    # -----------------------------------------------------------------
+    # Downloads
+    # -----------------------------------------------------------------
     st.subheader("Export")
     colA, colB = st.columns(2)
 
-    # CSV of portfolio samples
     csv_buf = StringIO()
     pd.DataFrame({"annual_loss_usd": port_samples}).to_csv(csv_buf, index=False)
     colA.download_button(
@@ -547,7 +748,6 @@ if st.session_state.run:
         mime="text/csv",
     )
 
-    # Run manifest (JSON)
     manifest = {
         "model_version": "mc-mvp-1",
         "n_sims": int(n_sims),
@@ -556,15 +756,8 @@ if st.session_state.run:
         "risk_register_path": str(risk_register_path),
         "rows": int(len(df_params_filtered)),
         "stats": {k: float(v) for k, v in stats.items()},
-        "filters": {
-            "domain": domain_choice,
-            "scenarios": selected_scenarios,
-        },
-        "risk_matrix": {
-            "metric_type": metric_type,
-            "boost_contrast": bool(boost_contrast),
-            "show_labels": bool(show_labels),
-        },
+        "filters": {"domain": domain_choice, "scenarios": selected_scenarios},
+        "risk_matrix": {"metric_type": metric_type, "boost_contrast": bool(boost_contrast), "show_labels": bool(show_labels)},
     }
     colB.download_button(
         "📑 Download Run Manifest (JSON)",
