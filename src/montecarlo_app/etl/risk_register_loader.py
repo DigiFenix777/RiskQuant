@@ -5,9 +5,10 @@ Load the risk register Excel file and print headers.
 Resolves absolute paths automatically so it runs from anywhere.
 """
 
-import yaml
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
+import yaml
 
 
 def project_root() -> Path:
@@ -20,7 +21,7 @@ def project_root() -> Path:
 def load_settings() -> dict:
     """Read YAML configuration using absolute path."""
     settings_path = project_root() / "src/montecarlo_app/config/settings.yaml"
-    with open(settings_path, "r", encoding="utf-8") as f:
+    with open(settings_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -39,30 +40,31 @@ REQUIRED_HEADERS = {
     "Regulatory Impact": "Regulatory_Impact",
     "Likelihood": "Likelihood",
     "Impact": "Impact",
-    "Risk Rating": "Risk_Rating",              # derived/metadata
+    "Risk Rating": "Risk_Rating",  # derived/metadata
     "Mitigation/Control": "Control_Description",
     "Responsible Party": "Owner",
     "Status": "Status",
 }
+
 
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Rename human-friendly headers to stable internal names."""
     rename_map = {k: v for k, v in REQUIRED_HEADERS.items() if k in df.columns}
     return df.rename(columns=rename_map)
 
+
 def validate_required_columns(df: pd.DataFrame) -> None:
     """Raise a clear error if any expected columns are missing."""
     missing = [k for k in REQUIRED_HEADERS if k not in df.columns and REQUIRED_HEADERS[k] not in df.columns]
     if missing:
-        raise ValueError(
-            f"Missing required columns: {missing}. "
-            f"Found columns: {list(df.columns)}"
-        )
+        raise ValueError(f"Missing required columns: {missing}. Found columns: {list(df.columns)}")
+
 
 def print_preview(df: pd.DataFrame, n: int = 5) -> None:
     """Show a tiny preview for sanity without spamming console."""
     print("Preview (first rows):")
     print(df.head(n).to_string(index=False))
+
 
 # --- Allowed sets & normalization helpers ---
 ALLOWED = {
@@ -99,10 +101,12 @@ FIXUPS = {
     },
 }
 
+
 def _clean_token(value: str) -> str:
     if value is None:
         return value
     return " ".join(str(value).strip().split())  # trim + collapse whitespace
+
 
 def _normalize_value(col: str, value: str) -> str:
     if value is None:
@@ -115,6 +119,7 @@ def _normalize_value(col: str, value: str) -> str:
     # Title-case common categorical values
     titled = v.title()
     return titled
+
 
 def validate_and_clean_values(df: pd.DataFrame) -> list[str]:
     """Normalize categorical text and report any values still outside the allowed sets."""
@@ -139,8 +144,9 @@ def validate_and_clean_values(df: pd.DataFrame) -> list[str]:
 def load_mappings() -> dict:
     """Load qualitative→numeric mappings from YAML."""
     m_path = project_root() / "src" / "montecarlo_app" / "config" / "mappings.yaml"
-    with open(m_path, "r", encoding="utf-8") as f:
+    with open(m_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
+
 
 def derive_parameters(df: pd.DataFrame, maps: dict) -> pd.DataFrame:
     """
@@ -149,19 +155,30 @@ def derive_parameters(df: pd.DataFrame, maps: dict) -> pd.DataFrame:
     - Loss_Min/Mode/Max
     """
     like_map = maps["likelihood_to_lambda"]
-    imp_map  = maps["impact_to_loss"]
+    imp_map = maps["impact_to_loss"]
 
     def _like(row):
         cfg = like_map.get(row["Likelihood"])
-        return pd.Series([cfg["min"], cfg["mode"], cfg["max"]], index=["Lambda_Min","Lambda_Mode","Lambda_Max"]) if cfg else pd.Series([None,None,None], index=["Lambda_Min","Lambda_Mode","Lambda_Max"])
+        return (
+            pd.Series(
+                [cfg["min"], cfg["mode"], cfg["max"]],
+                index=["Lambda_Min", "Lambda_Mode", "Lambda_Max"],
+            )
+            if cfg
+            else pd.Series([None, None, None], index=["Lambda_Min", "Lambda_Mode", "Lambda_Max"])
+        )
 
     def _imp(row):
         cfg = imp_map.get(row["Impact"])
-        return pd.Series([cfg["min"], cfg["mode"], cfg["max"]], index=["Loss_Min","Loss_Mode","Loss_Max"]) if cfg else pd.Series([None,None,None], index=["Loss_Min","Loss_Mode","Loss_Max"])
+        return (
+            pd.Series([cfg["min"], cfg["mode"], cfg["max"]], index=["Loss_Min", "Loss_Mode", "Loss_Max"])
+            if cfg
+            else pd.Series([None, None, None], index=["Loss_Min", "Loss_Mode", "Loss_Max"])
+        )
 
     df = df.copy()
-    df[["Lambda_Min","Lambda_Mode","Lambda_Max"]] = df.apply(_like, axis=1)
-    df[["Loss_Min","Loss_Mode","Loss_Max"]]       = df.apply(_imp, axis=1)
+    df[["Lambda_Min", "Lambda_Mode", "Lambda_Max"]] = df.apply(_like, axis=1)
+    df[["Loss_Min", "Loss_Mode", "Loss_Max"]] = df.apply(_imp, axis=1)
     return df
 
 
@@ -184,10 +201,20 @@ if __name__ == "__main__":
     df_params = derive_parameters(df, mappings)
 
     print("✅ Parameters derived (Lambda_*, Loss_*).")
-    print(df_params[[
-        "Risk_ID","Likelihood","Impact",
-        "Lambda_Min","Lambda_Mode","Lambda_Max",
-        "Loss_Min","Loss_Mode","Loss_Max"
-    ]].head(5).to_string(index=False))
-
-
+    print(
+        df_params[
+            [
+                "Risk_ID",
+                "Likelihood",
+                "Impact",
+                "Lambda_Min",
+                "Lambda_Mode",
+                "Lambda_Max",
+                "Loss_Min",
+                "Loss_Mode",
+                "Loss_Max",
+            ]
+        ]
+        .head(5)
+        .to_string(index=False)
+    )
