@@ -9,6 +9,7 @@ Note: Controls, correlations, and portfolio aggregation come later.
 """
 
 from __future__ import annotations
+
 import numpy as np
 
 
@@ -51,6 +52,7 @@ def summarize(samples: np.ndarray, percentiles=(50, 90, 95, 99)) -> dict:
     for p in percentiles:
         out[f"p{p}"] = float(np.percentile(samples, p))
     return out
+
 
 def simulate_portfolio(df_params, n_sims: int = 10000, seed: int | None = 42):
     """

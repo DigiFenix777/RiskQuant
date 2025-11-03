@@ -10,17 +10,17 @@ Run locally:
 """
 
 from __future__ import annotations
+
 import json
+import sys
 from io import StringIO
 from pathlib import Path
-import sys
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
-
 
 # ---------- UI: Page Setup ----------
 st.set_page_config(page_title="Cyber Risk Simulation Dashboard", layout="wide")
@@ -34,18 +34,18 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from montecarlo_app.etl.risk_register_loader import (  # noqa: E402
-    load_settings,
+    derive_parameters,
+    load_mappings,
     load_risk_register,
-    validate_required_columns,
+    load_settings,
     normalize_columns,
     validate_and_clean_values,
-    load_mappings,
-    derive_parameters,
+    validate_required_columns,
 )
 from montecarlo_app.model.monte_carlo import (  # noqa: E402
     simulate_portfolio,
-    summarize,
     simulate_scenario_row,
+    summarize,
 )
 
 # ---------- Sidebar Controls ----------
@@ -57,13 +57,17 @@ with st.sidebar:
 
     n_sims = st.number_input(
         "Number of Simulations",
-        min_value=1000, max_value=200000,
-        value=int(settings["simulation"]["runs"]), step=1000,
+        min_value=1000,
+        max_value=200000,
+        value=int(settings["simulation"]["runs"]),
+        step=1000,
     )
     seed = st.number_input(
         "Random Seed",
-        min_value=0, max_value=10**7,
-        value=int(settings["simulation"]["seed"]), step=1,
+        min_value=0,
+        max_value=10**7,
+        value=int(settings["simulation"]["seed"]),
+        step=1,
     )
     show_percentiles = st.multiselect(
         "Percentiles to Show",
@@ -224,7 +228,6 @@ def normalize_per_scn(per_scn_obj):
     return empty_samples, empty_summary
 
 
-
 # =====================================================================
 # ======================== Simulation + Results =======================
 # =====================================================================
@@ -238,8 +241,7 @@ if st.session_state.run:
     domain_choice = col_f1.selectbox("Domain", options=domain_options, index=0, key="filter_domain")
 
     df_params_filtered = (
-        df_params[df_params["Category"] == domain_choice].copy()
-        if domain_choice != "All" else df_params.copy()
+        df_params[df_params["Category"] == domain_choice].copy() if domain_choice != "All" else df_params.copy()
     )
 
     scenario_options = df_params_filtered["Risk_ID"].tolist()
@@ -255,9 +257,7 @@ if st.session_state.run:
     df_params_filtered = df_params_filtered[df_params_filtered["Risk_ID"].isin(selected_scenarios)]
 
     # ---------- Simulation ----------
-    port_samples, per_scn = simulate_portfolio(
-        df_params_filtered, n_sims=int(n_sims), seed=int(seed)
-    )
+    port_samples, per_scn = simulate_portfolio(df_params_filtered, n_sims=int(n_sims), seed=int(seed))
     per_samples, per_summary = normalize_per_scn(per_scn)
 
     # --- Developer diagnostics (temporary; remove later) ---
@@ -295,8 +295,10 @@ if st.session_state.run:
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("EAL (mean)", f"${stats['mean']:,.0f}")
     k2.metric("Median", f"${stats['median']:,.0f}")
-    k3.metric("p95 Loss" if 95 in show_percentiles else "p90 Loss",
-              f"${stats['p95' if 95 in show_percentiles else 'p90']:,.0f}")
+    k3.metric(
+        "p95 Loss" if 95 in show_percentiles else "p90 Loss",
+        f"${stats['p95' if 95 in show_percentiles else 'p90']:,.0f}",
+    )
     k4.metric("Max Observed", f"${stats['max']:,.0f}")
 
     # -----------------------------------------------------------------
@@ -343,32 +345,53 @@ if st.session_state.run:
             )
             st.info(
                 "💡 **Tips**\n\n"
-                "- Adjust simulation runs, percentiles, and scenario filters to see how the distribution and tail change.\n"
+                """- Adjust simulation runs, percentiles, and scenario filters to see 
+                how the distribution and tail change.\n"""
                 "- Compare baseline vs. with-control scenarios to demonstrate reduction in tail risk.\n"
                 "- Use the p95 to discuss tail exposure with leadership; use EAL for budgeting."
             )
-            st.button("Close", key="hist_insights_close_btn",
-                      on_click=lambda: st.session_state.update(show_hist_insights=False))
+            st.button(
+                "Close",
+                key="hist_insights_close_btn",
+                on_click=lambda: st.session_state.update(show_hist_insights=False),
+            )
 
     fig_hist = go.Figure()
     fig_hist.add_histogram(
-        x=port_samples, nbinsx=50, name="Portfolio Loss", histnorm=None,
+        x=port_samples,
+        nbinsx=50,
+        name="Portfolio Loss",
+        histnorm=None,
         hovertemplate="Annual Loss: $%{x:,.0f}<extra></extra>",
     )
     for p in show_percentiles:
         pval = stats.get(f"p{p}")
         if pval is not None:
             fig_hist.add_shape(
-                type="line", x0=pval, x1=pval, y0=0, y1=1, yref="paper",
+                type="line",
+                x0=pval,
+                x1=pval,
+                y0=0,
+                y1=1,
+                yref="paper",
                 line=dict(width=2, dash="dot"),
             )
             fig_hist.add_annotation(
-                x=pval, y=1, yref="paper",
-                text=f"p{p}: ${pval:,.0f}", showarrow=False, xanchor="left", yanchor="bottom",
+                x=pval,
+                y=1,
+                yref="paper",
+                text=f"p{p}: ${pval:,.0f}",
+                showarrow=False,
+                xanchor="left",
+                yanchor="bottom",
             )
     fig_hist.update_layout(
-        title=None, xaxis_title=f"Annual Loss ({currency})", yaxis_title="Frequency",
-        bargap=0.05, height=420, margin=dict(l=20, r=20, t=20, b=40),
+        title=None,
+        xaxis_title=f"Annual Loss ({currency})",
+        yaxis_title="Frequency",
+        bargap=0.05,
+        height=420,
+        margin=dict(l=20, r=20, t=20, b=40),
     )
     st.plotly_chart(fig_hist, use_container_width=True, key="plot_portfolio_hist")
 
@@ -386,7 +409,8 @@ if st.session_state.run:
     if st.session_state.get("show_cdf_insights", False):
         with st.expander("🧠 Data Insights — Cumulative Probability (CDF)", expanded=True):
             _median = f"${stats.get('median', 0):,.0f}"
-            _p90 = stats.get("p90"); _p95 = stats.get("p95")
+            _p90 = stats.get("p90")
+            _p95 = stats.get("p95")
             _p90_s = f"${_p90:,.0f}" if _p90 is not None else "—"
             _p95_s = f"${_p95:,.0f}" if _p95 is not None else "—"
             _plist = ", ".join([f"p{int(p)}" for p in show_percentiles])
@@ -397,11 +421,14 @@ if st.session_state.run:
                 "**≤ a given threshold**. Right = larger losses; up = higher probability."
             )
             st.markdown("#### Who it’s for")
-            st.write("Analysts & leaders setting **risk appetite** and **budget thresholds**, and discussing **tail risk**.")
+            st.write(
+                "Analysts & leaders setting **risk appetite** and **budget thresholds**, and discussing **tail risk**."
+            )
             st.markdown("#### How to use it")
             st.write(
                 "Pick a threshold on the x-axis and read up to get **P(Loss ≤ threshold)**. "
-                "Or pick a probability (e.g., 95%), read left to the curve, then down to the **loss at that confidence**."
+                """Or pick a probability (e.g., 95%), read left to the curve, 
+                then down to the **loss at that confidence**."""
             )
             st.markdown("#### Definitions")
             st.markdown(
@@ -418,32 +445,53 @@ if st.session_state.run:
                 "- Steeper curve near your threshold ⇒ small control changes can materially change risk.\n"
                 "- Compare baseline vs. with-control CDFs to show tail-risk reduction."
             )
-            st.button("Close", key="cdf_insights_close_btn",
-                      on_click=lambda: st.session_state.update(show_cdf_insights=False))
+            st.button(
+                "Close",
+                key="cdf_insights_close_btn",
+                on_click=lambda: st.session_state.update(show_cdf_insights=False),
+            )
 
     sorted_losses = np.sort(port_samples)
     cdf = np.arange(1, len(sorted_losses) + 1) / len(sorted_losses)
     fig_cdf = go.Figure()
-    fig_cdf.add_trace(go.Scatter(
-        x=sorted_losses, y=cdf, mode="lines", name="CDF",
-        hovertemplate="P(Loss ≤ $%{x:,.0f}) = %{y:.1%}<extra></extra>",
-    ))
+    fig_cdf.add_trace(
+        go.Scatter(
+            x=sorted_losses,
+            y=cdf,
+            mode="lines",
+            name="CDF",
+            hovertemplate="P(Loss ≤ $%{x:,.0f}) = %{y:.1%}<extra></extra>",
+        )
+    )
     for p in show_percentiles:
         pval = stats.get(f"p{p}")
         if pval is not None:
-            fig_cdf.add_trace(go.Scatter(
-                x=[pval], y=[p / 100], mode="markers+text",
-                text=[f"p{p}"], textposition="top center",
-                marker=dict(size=8), showlegend=False,
-                hovertemplate=f"p{p}: $%{{x:,.0f}}<extra></extra>",
-            ))
+            fig_cdf.add_trace(
+                go.Scatter(
+                    x=[pval],
+                    y=[p / 100],
+                    mode="markers+text",
+                    text=[f"p{p}"],
+                    textposition="top center",
+                    marker=dict(size=8),
+                    showlegend=False,
+                    hovertemplate=f"p{p}: $%{{x:,.0f}}<extra></extra>",
+                )
+            )
     fig_cdf.update_layout(
-        title=None, xaxis_title=f"Loss Threshold ({currency})", yaxis_title="Probability",
-        height=420, margin=dict(l=20, r=20, t=20, b=40),
+        title=None,
+        xaxis_title=f"Loss Threshold ({currency})",
+        yaxis_title="Probability",
+        height=420,
+        margin=dict(l=20, r=20, t=20, b=40),
     )
     st.plotly_chart(
-        fig_cdf, use_container_width=True,
-        key=f"plot_portfolio_cdf_{domain_choice}_{len(selected_scenarios)}_{int(st.session_state.get('show_cdf_insights', False))}",
+        fig_cdf,
+        use_container_width=True,
+        key = (
+            f"plot_portfolio_cdf_{domain_choice}_{len(selected_scenarios)}"
+            f"_{int(st.session_state.get('show_cdf_insights', False))}"
+        ),
     )
 
     # ---------- Scenario Comparison (Distribution by Scenario) ----------
@@ -499,15 +547,23 @@ if st.session_state.run:
 
     # Comparison controls (always enabled to avoid sticky state)
     comp_type = col_ctrl1.radio(
-        "Comparison Type", options=["Box", "Violin"], horizontal=True, index=0, key="comp_type_control",
+        "Comparison Type",
+        options=["Box", "Violin"],
+        horizontal=True,
+        index=0,
+        key="comp_type_control",
     )
     y_metric = col_ctrl2.selectbox(
         "Metric (used when no samples → bar)",
-        options=["p95", "median", "mean"], index=0, key="comp_y_metric",
+        options=["p95", "median", "mean"],
+        index=0,
+        key="comp_y_metric",
     )
     sort_metric = col_ctrl3.selectbox(
         "Sort by",
-        options=["Risk_ID", "p95", "median", "mean"], index=0, key="comp_sort_metric",
+        options=["Risk_ID", "p95", "median", "mean"],
+        index=0,
+        key="comp_sort_metric",
     )
 
     # Build per-scenario stats from whatever we have
@@ -552,7 +608,8 @@ if st.session_state.run:
             if comp_type == "Box":
                 fig_comp = px.box(
                     dfp,
-                    x="Risk_ID", y="Annual_Loss",
+                    x="Risk_ID",
+                    y="Annual_Loss",
                     color="Category" if "Category" in dfp.columns else None,
                     category_orders={"Risk_ID": order},
                     points=False,
@@ -562,15 +619,18 @@ if st.session_state.run:
             else:
                 fig_comp = px.violin(
                     dfp,
-                    x="Risk_ID", y="Annual_Loss",
+                    x="Risk_ID",
+                    y="Annual_Loss",
                     color="Category" if "Category" in dfp.columns else None,
                     category_orders={"Risk_ID": order},
-                    box=True, points=False,
+                    box=True,
+                    points=False,
                 )
                 y_label = "Annual Loss (USD)"
             # Avoid undefined legend labels; only show legend if Category exists
             fig_comp.update_traces(
-                name="Annual Loss", selector=dict(name=None),
+                name="Annual Loss",
+                selector=dict(name=None),
                 showlegend=("Category" in dfp.columns),
                 hovertemplate="Scenario=%{x}<br>Loss=$%{y:,.0f}<extra></extra>",
             )
@@ -581,12 +641,14 @@ if st.session_state.run:
             dfp = dfp.sort_values(by=y_metric, ascending=False, na_position="last")
             fig_comp = px.bar(
                 dfp,
-                x="Risk_ID", y=y_metric,
+                x="Risk_ID",
+                y=y_metric,
                 color="Category" if "Category" in dfp.columns else None,
                 category_orders={"Risk_ID": order},
             )
             fig_comp.update_traces(
-                name=y_metric.upper(), selector=dict(name=None),
+                name=y_metric.upper(),
+                selector=dict(name=None),
                 showlegend=("Category" in dfp.columns),
                 hovertemplate=f"Scenario=%{{x}}<br>{y_metric}=$%{{y:,.0f}}<extra></extra>",
             )
@@ -602,7 +664,10 @@ if st.session_state.run:
         st.plotly_chart(
             fig_comp,
             use_container_width=True,
-            key=f"plot_comp_{'samples' if has_samples else 'summary'}_{comp_type}_{y_metric}_{domain_choice}_{len(selected_scenarios)}",
+            key = (
+                f"plot_comp_{'samples' if has_samples else 'summary'}"
+                f"_{comp_type}_{y_metric}_{domain_choice}_{len(selected_scenarios)}"
+            ),
         )
 
     # ---------- Risk Matrix (Likelihood × Impact) ----------
@@ -630,7 +695,8 @@ if st.session_state.run:
     merge_cols = ["Risk_ID"] + [c for c in ["Likelihood", "Impact", "Category"] if c in df_params_filtered.columns]
     ctx = df_stats_src.merge(
         df_params_filtered[merge_cols].drop_duplicates("Risk_ID"),
-        on="Risk_ID", how="left",
+        on="Risk_ID",
+        how="left",
     )
 
     # Fixed axis orders
@@ -639,33 +705,37 @@ if st.session_state.run:
 
     # Aggregate per cell
     if not ctx.empty:
-        grouped = (
-            ctx.groupby(["Likelihood", "Impact"], as_index=False)
-            .agg(
-                p95_mean=("p95", "mean"),
-                p95_sum=("p95", "sum"),
-                n=("p95", "size"),
-            )
+        grouped = ctx.groupby(["Likelihood", "Impact"], as_index=False).agg(
+            p95_mean=("p95", "mean"),
+            p95_sum=("p95", "sum"),
+            n=("p95", "size"),
         )
     else:
         grouped = pd.DataFrame(columns=["Likelihood", "Impact", "p95_mean", "p95_sum", "n"])
 
     # Choose metric shown (toggle mean vs total)
     metric_type = st.radio(
-        "Cell metric", options=["Mean p95", "Total p95"], horizontal=True, index=0, key="rm_metric_type",
+        "Cell metric",
+        options=["Mean p95", "Total p95"],
+        horizontal=True,
+        index=0,
+        key="rm_metric_type",
     )
     grouped["p95_plot"] = grouped["p95_mean"] if metric_type == "Mean p95" else grouped["p95_sum"]
 
     # Full grid so empty combos render as blank
     grid = pd.MultiIndex.from_product([like_order, imp_order], names=["Likelihood", "Impact"]).to_frame(index=False)
-    matrix_full = grid.merge(grouped, on=["Likelihood", "Impact"], how="left") \
-        .fillna({"p95_mean": 0, "p95_sum": 0, "p95_plot": 0, "n": 0})
+    matrix_full = grid.merge(grouped, on=["Likelihood", "Impact"], how="left").fillna(
+        {"p95_mean": 0, "p95_sum": 0, "p95_plot": 0, "n": 0}
+    )
 
     # Pivot for heatmap
-    z_mat = (matrix_full.pivot(index="Impact", columns="Likelihood", values="p95_plot")
-             .reindex(index=imp_order, columns=like_order))
-    n_mat = (matrix_full.pivot(index="Impact", columns="Likelihood", values="n")
-             .reindex(index=imp_order, columns=like_order))
+    z_mat = matrix_full.pivot(index="Impact", columns="Likelihood", values="p95_plot").reindex(
+        index=imp_order, columns=like_order
+    )
+    n_mat = matrix_full.pivot(index="Impact", columns="Likelihood", values="n").reindex(
+        index=imp_order, columns=like_order
+    )
 
     # Mask empty cells (avoid “0 USD” tiles)
     z_plot = z_mat.copy().astype(float)
@@ -677,11 +747,11 @@ if st.session_state.run:
     # Optional labels
     show_labels = st.checkbox("Show labels", value=True, key="rm_show_labels")
     if show_labels:
+
         def _fmt(v, n):
             if (n or 0) <= 0 or v is None or (isinstance(v, float) and np.isnan(v)):
                 return ""
             return f"n={int(n)}\n${v / 1_000_000:,.1f}M"
-
 
         text_mat = z_plot.copy()
         for i in range(text_mat.shape[0]):
@@ -708,8 +778,10 @@ if st.session_state.run:
             x=z_plot.columns.tolist(),
             y=z_plot.index.tolist(),
             coloraxis="coloraxis",
-            zmin=zmin, zmax=zmax,
-            text=text_vals, texttemplate=texttemplate,
+            zmin=zmin,
+            zmax=zmax,
+            text=text_vals,
+            texttemplate=texttemplate,
             hovertemplate=(
                 "Likelihood=%{x}<br>"
                 "Impact=%{y}<br>"
@@ -757,7 +829,11 @@ if st.session_state.run:
         "rows": int(len(df_params_filtered)),
         "stats": {k: float(v) for k, v in stats.items()},
         "filters": {"domain": domain_choice, "scenarios": selected_scenarios},
-        "risk_matrix": {"metric_type": metric_type, "boost_contrast": bool(boost_contrast), "show_labels": bool(show_labels)},
+        "risk_matrix": {
+            "metric_type": metric_type,
+            "boost_contrast": bool(boost_contrast),
+            "show_labels": bool(show_labels),
+        },
     }
     colB.download_button(
         "📑 Download Run Manifest (JSON)",

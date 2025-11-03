@@ -9,9 +9,10 @@ for the FIRST scenario only, and prints summary stats.
 import sys
 from pathlib import Path
 
+import matplotlib.pyplot as plt
+
 # --- Third-party ---
 import numpy as np
-import matplotlib.pyplot as plt
 
 # --- Make src importable BEFORE local imports ---
 ROOT = Path(__file__).resolve().parents[1]  # repo root: .../RiskQuant
@@ -21,13 +22,13 @@ if str(SRC) not in sys.path:
 
 # --- Local imports (Ruff E402 due to sys.path tweak above) ---
 from montecarlo_app.etl.risk_register_loader import (  # noqa: E402
-    load_settings,
+    derive_parameters,
+    load_mappings,
     load_risk_register,
-    validate_required_columns,
+    load_settings,
     normalize_columns,
     validate_and_clean_values,
-    load_mappings,
-    derive_parameters,
+    validate_required_columns,
 )
 from montecarlo_app.model.monte_carlo import (  # noqa: E402
     simulate_scenario_row,
@@ -52,18 +53,18 @@ def main():
     samples = simulate_scenario_row(row, n_sims=10000, seed=42)
     stats = summarize(samples)
 
-    print("\n🎲 Scenario:", row['Risk_ID'], "-", row['Risk_Description'][:60], "...")
-    print("   Likelihood:", row['Likelihood'], "Impact:", row['Impact'])
-    print("   λ ~ Triangular(", row['Lambda_Min'], row['Lambda_Mode'], row['Lambda_Max'], ")")
-    print("   Loss ~ Triangular(", row['Loss_Min'], row['Loss_Mode'], row['Loss_Max'], ")")
+    print("\n🎲 Scenario:", row["Risk_ID"], "-", row["Risk_Description"][:60], "...")
+    print("   Likelihood:", row["Likelihood"], "Impact:", row["Impact"])
+    print("   λ ~ Triangular(", row["Lambda_Min"], row["Lambda_Mode"], row["Lambda_Max"], ")")
+    print("   Loss ~ Triangular(", row["Loss_Min"], row["Loss_Mode"], row["Loss_Max"], ")")
     print("\n📊 Summary (USD):")
     for k in ["mean", "median", "p90", "p95", "p99", "min", "max", "stdev"]:
         if k in stats:
             print(f"  {k:>6}: {stats[k]:,.0f}")
 
-
- # --- NEW: Portfolio run across all scenarios ---
+    # --- NEW: Portfolio run across all scenarios ---
     from montecarlo_app.model.monte_carlo import simulate_portfolio
+
     port_samples, per_scn = simulate_portfolio(df_params, n_sims=10000, seed=42)
     port_stats = summarize(port_samples)
 
@@ -77,7 +78,6 @@ def main():
     print("\nTop 3 scenarios by p95 (indicative):")
     for rid, s in top3:
         print(f"  {rid}: p95={s['p95']:,.0f}, mean={s['mean']:,.0f}")
-
 
     print("\nTop 3 scenarios by p95 (indicative):")
     for rid, s in top3:
@@ -107,6 +107,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
