@@ -433,10 +433,10 @@ if st.session_state.run:
             st.markdown("#### Definitions")
             st.markdown(
                 f"""
-- **Median (p50):** 50% of outcomes are ≤ this value. **Current:** **{_median}**
-- **p90:** 90% of outcomes are ≤ this value (conservative budgeting). **Current:** **{_p90_s}**
-- **p95:** 95% of outcomes are ≤ this value (tail-risk marker). **Current:** **{_p95_s}**
-- **Displayed percentiles:** {_plist or "—"}
+                    - **Median (p50):** 50% of outcomes are ≤ this value. **Current:** **{_median}**
+                    - **p90:** 90% of outcomes are ≤ this value (conservative budgeting). **Current:** **{_p90_s}**
+                    - **p95:** 95% of outcomes are ≤ this value (tail-risk marker). **Current:** **{_p95_s}**
+                    - **Displayed percentiles:** {_plist or "—"}
                 """
             )
             st.info(
@@ -488,14 +488,56 @@ if st.session_state.run:
     st.plotly_chart(
         fig_cdf,
         use_container_width=True,
-        key = (
+        key=(
             f"plot_portfolio_cdf_{domain_choice}_{len(selected_scenarios)}"
             f"_{int(st.session_state.get('show_cdf_insights', False))}"
         ),
     )
 
     # ---------- Scenario Comparison (Distribution by Scenario) ----------
-    st.subheader("🎯 Scenario Comparison (Distribution by Scenario)")
+
+    # --- Header + toggle button (place this immediately above the Scenario Comparison expander) ---
+    st.session_state.setdefault("show_scenario_insights", False)
+
+    c1, c2 = st.columns([1, 0.3])
+    with c1:
+        st.markdown("## 📦 Distribution by Scenario")
+    with c2:
+        # Explicit key avoids state collisions (Streamlit 1.51+)
+        if st.button("ℹ️ Data Insights", key="scenario_insights_btn"):
+            st.session_state.show_scenario_insights = not st.session_state.show_scenario_insights
+
+    if st.session_state.get("show_scenario_insights", False):
+        with st.expander("🧠 Data Insights — Distribution by Scenario", expanded=True):
+            st.markdown("""
+    **What it is**  
+    A comparison of simulated annual loss distributions for each scenario. Switch between **Box**, **Violin**, 
+    and **Bar** to explore central tendency (P50/median), spread (IQR), and tail risk (outliers/long tails).
+
+    **Who it’s for**  
+    • GRC/risk analysts prioritizing scenarios  
+    • Leaders deciding where to invest limited budget
+
+    **How to use it**  
+    1. **Median (P50)** ≈ “typical” outcome; **P95** ≈ “bad but plausible” tail.  
+    2. Wide violins/boxes = more uncertainty; tall bars = higher expected loss.  
+    3. Compare scenarios with similar medians but very different tails—those with higher **P95** may deserve
+   earlier attention.
+
+
+    **Definitions**  
+    • **P50 (Median):** 50% of simulations are ≤ this value.  
+    • **P95:** 95% of simulations are ≤ this value (tail).  
+    • **IQR:** Middle 50% of outcomes (Q1–Q3).  
+    • **Outliers:** Unusually large losses—watch clustering in the upper tail.
+
+    **Tips**  
+    • Sort by **P95** to surface tail-heavy scenarios.  
+    • Use category colors (GOV, CMP, OPS, SEC) to spot themes.  
+    • Re-run with more iterations to stabilize noisy tails.
+    """)
+
+    #   st.subheader("🎯 Scenario Comparison (Distribution by Scenario)")
 
     # Controls row
     col_ctrl1, col_ctrl2, col_ctrl3 = st.columns([0.45, 0.35, 0.20])
@@ -664,14 +706,51 @@ if st.session_state.run:
         st.plotly_chart(
             fig_comp,
             use_container_width=True,
-            key = (
+            key=(
                 f"plot_comp_{'samples' if has_samples else 'summary'}"
                 f"_{comp_type}_{y_metric}_{domain_choice}_{len(selected_scenarios)}"
             ),
         )
 
     # ---------- Risk Matrix (Likelihood × Impact) ----------
-    st.subheader("🔥 Risk Matrix (Likelihood × Impact) — Colored by p95 Loss)")
+    # --- Header + toggle button (place this immediately above the Risk Matrix expander) ---
+    st.session_state.setdefault("show_matrix_insights", False)
+
+    c1, c2 = st.columns([1, 0.3])
+    with c1:
+        st.markdown("## 🧮 Risk Matrix (Likelihood × Impact)")
+    with c2:
+        if st.button("ℹ️ Data Insights", key="matrix_insights_btn"):
+            st.session_state.show_matrix_insights = not st.session_state.show_matrix_insights
+
+    if st.session_state.get("show_matrix_insights", False):
+        with st.expander("🧠 Data Insights — Risk Matrix (Likelihood × Impact)", expanded=True):
+            st.markdown("""
+    **What it is**  
+    A qualitative map of **Likelihood × Impact** showing which scenarios are most concerning at a glance. 
+    It complements the quantitative charts by offering a quick triage view.
+
+    **Who it’s for**  
+    • Executives and managers who need a simple, common-language view  
+    • Analysts aligning portfolio risk to governance processes
+
+    **How to use it**  
+    1. Start triage in the **upper right** (High × High).  
+    2. Cross-check these with the **quantitative tails** (P95) for budget planning.  
+    3. Use labels and contrast toggles to improve readability during reviews.
+
+    **Definitions & Caveats**  
+    • **Likelihood:** Expected frequency (mapped from ARO/λ).  
+    • **Impact:** Consequence of a single loss event (mapped from min/mode/max).  
+    • **Caveat:** The grid is **ordinal**, not monetary—always validate with Monte Carlo results.
+
+    **Tips**  
+    • Keep qualitative→quantitative mappings in sync to avoid drift.  
+    • When two items land in the same cell, use **P95** or **EAL** to break ties.  
+    • Track movement over time (controls, incidents) to show improvement.
+    """)
+
+    #    st.subheader("🔥 Risk Matrix (Likelihood × Impact) — Colored by p95 Loss)")
 
     # Build a per-scenario summary we can aggregate into cells
     if not per_summary.empty:
