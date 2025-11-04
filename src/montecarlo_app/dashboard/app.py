@@ -386,7 +386,8 @@ if st.session_state.run:
     if st.session_state.get("show_cdf_insights", False):
         with st.expander("🧠 Data Insights — Cumulative Probability (CDF)", expanded=True):
             _median = f"${stats.get('median', 0):,.0f}"
-            _p90 = stats.get("p90"); _p95 = stats.get("p95")
+            _p90 = stats.get("p90")
+            _p95 = stats.get("p95")
             _p90_s = f"${_p90:,.0f}" if _p90 is not None else "—"
             _p95_s = f"${_p95:,.0f}" if _p95 is not None else "—"
             _plist = ", ".join([f"p{int(p)}" for p in show_percentiles])
