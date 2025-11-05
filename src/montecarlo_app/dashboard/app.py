@@ -51,10 +51,67 @@ from montecarlo_app.model.monte_carlo import (  # noqa: E402
 # ---------- Sidebar Controls ----------
 with st.sidebar:
     st.header("⚙️ Model Settings")
-    settings = load_settings()
-    risk_register_path = settings["data"]["risk_register_path"]
-    st.caption(f"Using risk register:\n{risk_register_path}")
 
+    # Load baseline settings.yaml
+    settings = load_settings()
+
+    # --- List available Excel registers under data/input ---
+    def _list_register_files():
+        root = ROOT / "data" / "input"  # ROOT already points to project root
+        root.mkdir(parents=True, exist_ok=True)
+        return sorted([p for p in root.glob("*.xlsx") if p.is_file()])
+
+    register_files = _list_register_files()
+    options = [p.stem for p in register_files]
+
+    # Try to select the current settings.yaml path by default
+    default_stem = None
+    try:
+        current_rel = settings["data"]["risk_register_path"]
+        current_abs = (ROOT / current_rel).resolve()
+        if current_abs.exists():
+            default_stem = current_abs.stem
+    except Exception:
+        default_stem = None
+
+    default_index = options.index(default_stem) if default_stem in options else (0 if options else None)
+
+    st.markdown("### 📂 Data Source")
+    selected_name = st.selectbox(
+        "Select Risk Register",
+        options,
+        index=default_index,
+        key="risk_register_choice",
+    )
+
+    # Manual reload to clear cache when files change on disk
+    def _clear_data_cache() -> None:
+        try:
+            st.cache_data.clear()
+        except Exception:
+            pass
+
+    st.button("🔄 Reload data", on_click=_clear_data_cache)
+
+    # Compute an overridden settings dict that points to the selected file
+    settings_selected = dict(settings)  # shallow copy
+    settings_selected.setdefault("data", dict(settings.get("data", {})))
+
+    chosen_path = None
+    if selected_name and register_files:
+        stems = {p.stem: p for p in register_files}
+        chosen_path = stems.get(selected_name)
+
+    if chosen_path is not None:
+        # loader expects a path relative to project root
+        rel_path = chosen_path.resolve().relative_to(ROOT)
+        settings_selected["data"]["risk_register_path"] = str(rel_path)
+
+    # Show the path we will actually use
+    risk_register_path_display = settings_selected["data"]["risk_register_path"]
+    st.caption(f"Using risk register:\n{risk_register_path_display}")
+
+    # --- Existing controls (unchanged) ---
     n_sims = st.number_input(
         "Number of Simulations",
         min_value=1000,
@@ -90,7 +147,6 @@ with st.sidebar:
         st.session_state.run = True
     if st.button("↺ Reset", type="secondary"):
         st.session_state.run = False
-
 
 # ---------- Data Prep (cached) ----------
 @st.cache_data(show_spinner=False)
@@ -233,7 +289,7 @@ def normalize_per_scn(per_scn_obj):
 # =====================================================================
 if st.session_state.run:
     # Prepare parameters (cached)
-    df_params = _prepare_params(settings)
+    df_params = _prepare_params(settings_selected)
 
     # --- Filters (Domain / Scenarios) ---
     domain_options = ["All"] + sorted(df_params["Category"].dropna().unique().tolist())
@@ -259,34 +315,6 @@ if st.session_state.run:
     # ---------- Simulation ----------
     port_samples, per_scn = simulate_portfolio(df_params_filtered, n_sims=int(n_sims), seed=int(seed))
     per_samples, per_summary = normalize_per_scn(per_scn)
-
-    # --- Developer diagnostics (temporary; remove later) ---
-    with st.expander("🧪 Developer diagnostics (temporary)", expanded=False):
-        st.write("type(per_scn):", type(per_scn).__name__)
-        try:
-            if isinstance(per_scn, dict):
-                keys_preview = list(per_scn.keys())[:5]
-                st.write("per_scn dict keys (preview):", keys_preview)
-                if keys_preview:
-                    st.write("example value type:", type(per_scn[keys_preview[0]]).__name__)
-            elif isinstance(per_scn, (list, tuple)):
-                st.write("per_scn len:", len(per_scn))
-                if len(per_scn) > 0:
-                    st.write("first item type:", type(per_scn[0]).__name__)
-            elif isinstance(per_scn, pd.DataFrame):
-                st.write("per_scn df shape:", per_scn.shape)
-                st.dataframe(per_scn.head())
-            else:
-                st.write("per_scn preview:", str(per_scn)[:200])
-        except Exception as e:
-            st.write("diagnostics error:", repr(e))
-
-        st.write("per_samples shape:", per_samples.shape)
-        if not per_samples.empty:
-            st.dataframe(per_samples.head())
-        st.write("per_summary shape:", per_summary.shape)
-        if not per_summary.empty:
-            st.dataframe(per_summary.head())
 
     # ---------- Summary stats ----------
     stats = summarize(port_samples)
@@ -904,7 +932,7 @@ if st.session_state.run:
         "n_sims": int(n_sims),
         "seed": int(seed),
         "percentiles": list(map(int, show_percentiles)),
-        "risk_register_path": str(risk_register_path),
+        "risk_register_path": str(risk_register_path_display),
         "rows": int(len(df_params_filtered)),
         "stats": {k: float(v) for k, v in stats.items()},
         "filters": {"domain": domain_choice, "scenarios": selected_scenarios},
