@@ -50,68 +50,18 @@ from montecarlo_app.model.monte_carlo import (  # noqa: E402
 
 # ---------- Sidebar Controls ----------
 with st.sidebar:
-    st.header("⚙️ Model Settings")
+    # Brand Header
+    st.markdown("## 🧮 RiskQuant")
+    st.divider()
 
     # Load baseline settings.yaml
     settings = load_settings()
 
-    # --- List available Excel registers under data/input ---
-    def _list_register_files():
-        root = ROOT / "data" / "input"  # ROOT already points to project root
-        root.mkdir(parents=True, exist_ok=True)
-        return sorted([p for p in root.glob("*.xlsx") if p.is_file()])
+    # =======================
+    # Configure Simulation
+    # =======================
+    st.subheader("⚙️ Configure Simulation")
 
-    register_files = _list_register_files()
-    options = [p.stem for p in register_files]
-
-    # Try to select the current settings.yaml path by default
-    default_stem = None
-    try:
-        current_rel = settings["data"]["risk_register_path"]
-        current_abs = (ROOT / current_rel).resolve()
-        if current_abs.exists():
-            default_stem = current_abs.stem
-    except Exception:
-        default_stem = None
-
-    default_index = options.index(default_stem) if default_stem in options else (0 if options else None)
-
-    st.markdown("### 📂 Data Source")
-    selected_name = st.selectbox(
-        "Select Risk Register",
-        options,
-        index=default_index,
-        key="risk_register_choice",
-    )
-
-    # Manual reload to clear cache when files change on disk
-    def _clear_data_cache() -> None:
-        try:
-            st.cache_data.clear()
-        except Exception:
-            pass
-
-    st.button("🔄 Reload data", on_click=_clear_data_cache)
-
-    # Compute an overridden settings dict that points to the selected file
-    settings_selected = dict(settings)  # shallow copy
-    settings_selected.setdefault("data", dict(settings.get("data", {})))
-
-    chosen_path = None
-    if selected_name and register_files:
-        stems = {p.stem: p for p in register_files}
-        chosen_path = stems.get(selected_name)
-
-    if chosen_path is not None:
-        # loader expects a path relative to project root
-        rel_path = chosen_path.resolve().relative_to(ROOT)
-        settings_selected["data"]["risk_register_path"] = str(rel_path)
-
-    # Show the path we will actually use
-    risk_register_path_display = settings_selected["data"]["risk_register_path"]
-    st.caption(f"Using risk register:\n{risk_register_path_display}")
-
-    # --- Existing controls (unchanged) ---
     n_sims = st.number_input(
         "Number of Simulations",
         min_value=1000,
@@ -126,26 +76,99 @@ with st.sidebar:
         value=int(settings["simulation"]["seed"]),
         step=1,
     )
-    show_percentiles = st.multiselect(
-        "Percentiles to Show",
-        options=[50, 90, 95, 99],
-        default=settings["simulation"]["percentiles"],
-    )
-    currency = st.selectbox("Currency", options=["USD"], index=0)
+
+    with st.expander("Advanced Settings", expanded=False):
+        show_percentiles = st.multiselect(
+            "Percentiles to Show",
+            options=[50, 90, 95, 99],
+            default=settings["simulation"]["percentiles"],
+        )
+        currency = st.selectbox("Currency", options=["USD"], index=0)
+
+    # Fallbacks if Advanced not opened
+    if "show_percentiles" not in locals():
+        show_percentiles = settings["simulation"]["percentiles"]
+    if "currency" not in locals():
+        currency = "USD"
 
     st.divider()
-    st.header("ℹ️ About")
-    st.info(
-        "Monte Carlo simulates thousands of risk outcomes to estimate expected and tail losses. "
-        "Use the controls above to adjust parameters."
-    )
 
-    # --- Stateful run/reset controls ---
+    # =======================
+    # Input Data
+    # =======================
+    st.subheader("📥 Input Data")
+
+    with st.expander("📂 Data Source", expanded=False):
+        def _list_register_files():
+            root = ROOT / "data" / "input"
+            root.mkdir(parents=True, exist_ok=True)
+            return sorted([p for p in root.glob("*.xlsx") if p.is_file()])
+
+        register_files = _list_register_files()
+        options = [p.stem for p in register_files]
+
+        # Default to the file referenced in settings.yaml when present
+        default_stem = None
+        try:
+            current_rel = settings["data"]["risk_register_path"]
+            current_abs = (ROOT / current_rel).resolve()
+            if current_abs.exists():
+                default_stem = current_abs.stem
+        except Exception:
+            default_stem = None
+
+        default_index = options.index(default_stem) if default_stem in options else (0 if options else None)
+
+        selected_name = st.selectbox(
+            "Select Risk Register",
+            options,
+            index=default_index,
+            key="risk_register_choice",
+        )
+
+        def _clear_data_cache() -> None:
+            try:
+                st.cache_data.clear()
+            except Exception:
+                pass
+
+        st.button("🔄 Reload data", on_click=_clear_data_cache)
+
+        # Override settings with selected file
+        settings_selected = dict(settings)
+        settings_selected.setdefault("data", dict(settings.get("data", {})))
+
+        chosen_path = None
+        if selected_name and register_files:
+            stems = {p.stem: p for p in register_files}
+            chosen_path = stems.get(selected_name)
+
+        if chosen_path is not None:
+            rel_path = chosen_path.resolve().relative_to(ROOT)
+            settings_selected["data"]["risk_register_path"] = str(rel_path)
+
+        # Display actual path used
+        risk_register_path_display = settings_selected["data"]["risk_register_path"]
+        st.caption(f"Using risk register:\n{risk_register_path_display}")
+
+    # Fallback if expander not opened
+    if "settings_selected" not in locals():
+        settings_selected = settings
+        risk_register_path_display = settings["data"]["risk_register_path"]
+
+    st.divider()
+
+    # =======================
+    # Execute RiskQuant
+    # =======================
+    st.subheader("🚀 Execute RiskQuant")
+
     if "run" not in st.session_state:
         st.session_state.run = False
-    if st.button("▶ Run Simulation", type="primary"):
+
+    if st.button("▶ Run Simulation", key="run_btn", type="primary", use_container_width=True):
         st.session_state.run = True
-    if st.button("↺ Reset", type="secondary"):
+    if st.button("↺ Reset", key="reset_btn", type="secondary", use_container_width=True):
         st.session_state.run = False
 
 # ---------- Data Prep (cached) ----------
