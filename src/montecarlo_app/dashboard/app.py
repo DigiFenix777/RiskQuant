@@ -159,9 +159,9 @@ with st.sidebar:
     st.divider()
 
     # =======================
-    # Execute RiskQuant
+    # Quantify Risk
     # =======================
-    st.subheader("🚀 Execute RiskQuant")
+    st.subheader("🚀 Quantify Risk")
 
     if "run" not in st.session_state:
         st.session_state.run = False
