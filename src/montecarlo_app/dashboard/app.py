@@ -12,6 +12,7 @@ Run locally:
 from __future__ import annotations
 
 import json
+import os
 import sys
 from io import StringIO
 from pathlib import Path
@@ -334,6 +335,163 @@ if st.session_state.run:
         st.warning("No scenarios selected for this domain. Select at least one.")
         st.stop()
     df_params_filtered = df_params_filtered[df_params_filtered["Risk_ID"].isin(selected_scenarios)]
+
+    # ============================
+    # Explore Risk Register Data (UX block v4)
+    # ============================
+    import os
+
+    import pandas as pd
+
+    # --- Resolve active dataset name
+    try:
+        _active_dataset = selected_name if 'selected_name' in locals() and selected_name else os.path.basename(
+            str(risk_register_path_display))
+    except Exception:
+        _active_dataset = "Unknown dataset"
+
+    # --- Build a domain-scoped base (so unchecking the toggle shows ALL domain rows, not only selected)
+    if domain_choice == "All":
+        df_params_domain = df_params.copy()
+    else:
+        df_params_domain = df_params[df_params["Category"] == domain_choice].copy()
+
+    # --- Section header (match ~14px like "Scenarios (optional)")
+    st.markdown(
+        """
+        <style>
+          .rq-ref-header { font-size:14px; font-weight:600; margin: 0.4rem 0 0.25rem 0; }
+        </style>
+        <p class="rq-ref-header">Explore Risk Register Data</p>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.expander(f"Active data: {_active_dataset}", expanded=False):
+        # Desired columns and order
+        desired_cols = [
+            "Risk_ID", "Asset", "Scenario",
+            "Likelihood", "Impact", "Risk Rating",
+            "Loss_Min", "Loss_Mode", "Loss_Max",
+            "Owner", "Notes",
+        ]
+
+        # Map labels → actual columns (handle underscores)
+        colmap = {}
+        for c in desired_cols:
+            if c in df_params_domain.columns:
+                colmap[c] = c
+            elif c.replace(" ", "_") in df_params_domain.columns:
+                colmap[c] = c.replace(" ", "_")
+            elif c == "Risk Rating" and "Risk_Rating" in df_params_domain.columns:
+                colmap[c] = "Risk_Rating"
+
+        present_labels = [c for c in desired_cols if c in colmap]
+
+        # Toggle: limit to currently selected scenarios, or show all within domain
+        only_sel = st.checkbox("Show only currently selected scenarios", value=True, key="ref_only_sel_v4")
+        if only_sel:
+            base_df = df_params_domain[df_params_domain["Risk_ID"].isin(selected_scenarios)].copy()
+        else:
+            base_df = df_params_domain.copy()
+
+        ref_df = base_df[[colmap[c] for c in present_labels]].copy()
+        # Normalize headers back to friendly labels
+        inv_map = {v: k for k, v in colmap.items()}
+        ref_df = ref_df.rename(columns=inv_map)
+
+        # ----- Colors (more saturated + auto contrast) -----
+        # Category colors for Risk_ID cell background
+        cat_color = {
+            "CMP": "#F06292",  # deeper pink
+            "GOV": "#E53935",  # deep red
+            "OPS": "#1E88E5",  # vivid blue
+            "SEC": "#64B5F6",  # stronger light blue
+        }
+        # Risk heat colors (closer to your matrix)
+        risk_heat = {
+            "Very Low": "#C8EFC3",
+            "Low": "#93E18A",
+            "Medium": "#FFD166",
+            "High": "#FF9F50",
+            "Critical": "#E53935",  # deep red (white text for contrast)
+        }
+
+
+        def _hex_to_rgb(hex_color: str):
+            hex_color = hex_color.lstrip("#")
+            return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+
+
+        def _luminance(hex_color: str) -> float:
+            r, g, b = _hex_to_rgb(hex_color)
+
+            def _conv(c):
+                c = c / 255.0
+                return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+            R, G, B = _conv(r), _conv(g), _conv(b)
+            return 0.2126 * R + 0.7152 * G + 0.0722 * B
+
+
+        def _auto_text_color(bg_hex: str) -> str:
+            # WCAG-ish contrast: use black on light backgrounds, white on dark
+            try:
+                return "black" if _luminance(bg_hex) > 0.45 else "white"
+            except Exception:
+                return "black"
+
+
+        def _risk_id_style(row):
+            styles = ["" for _ in row.index]
+            if "Risk_ID" in row.index:
+                rid = str(row["Risk_ID"])
+                prefix = rid.split("-")[0] if "-" in rid else ""
+                bg = cat_color.get(prefix)
+                if bg:
+                    color = _auto_text_color(bg)
+                    idx = list(row.index).index("Risk_ID")
+                    styles[idx] = f"background-color: {bg}; color: {color};"
+            return styles
+
+
+        def _heat_cell(val):
+            if pd.isna(val):
+                return ""
+            txt = str(val)
+            bg = risk_heat.get(txt)
+            if not bg:
+                return ""
+            color = _auto_text_color(bg)
+            return f"background-color: {bg}; color: {color};"
+
+
+        show_df = ref_df.copy()
+        styler = show_df.style
+
+        # Row-wise style for Risk_ID by Category
+        styler = styler.apply(_risk_id_style, axis=1)
+
+        # Heat cells for Likelihood / Impact / Risk Rating
+        for col in ["Likelihood", "Impact", "Risk Rating"]:
+            if col in show_df.columns:
+                styler = styler.applymap(_heat_cell, subset=pd.IndexSlice[:, [col]])
+
+        # Currency formatting for loss columns
+        for c in ["Loss_Min", "Loss_Mode", "Loss_Max"]:
+            if c in show_df.columns:
+                styler = styler.format({c: lambda x: f"${x:,.0f}" if pd.notna(x) else "—"})
+
+        # Do NOT force a global text color; rely on theme + per-cell contrast
+        st.dataframe(styler, use_container_width=True)
+
+        st.caption(
+            "View scenario inputs and qualitative ratings from the active risk register. "
+            "Updates automatically with your current domain and scenario selections."
+        )
+    # ============================
+    # End UX block v4
+    # ============================
 
     # ---------- Simulation ----------
     port_samples, per_scn = simulate_portfolio(df_params_filtered, n_sims=int(n_sims), seed=int(seed))
