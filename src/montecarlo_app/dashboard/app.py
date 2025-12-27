@@ -100,6 +100,7 @@ with st.sidebar:
     st.subheader("📥 Input Data")
 
     with st.expander("📂 Data Source", expanded=False):
+
         def _list_register_files():
             root = ROOT / "data" / "input"
             root.mkdir(parents=True, exist_ok=True)
@@ -171,6 +172,7 @@ with st.sidebar:
         st.session_state.run = True
     if st.button("↺ Reset", key="reset_btn", type="secondary", use_container_width=True):
         st.session_state.run = False
+
 
 # ---------- Data Prep (cached) ----------
 @st.cache_data(show_spinner=False)
@@ -345,8 +347,11 @@ if st.session_state.run:
 
     # --- Resolve active dataset name
     try:
-        _active_dataset = selected_name if 'selected_name' in locals() and selected_name else os.path.basename(
-            str(risk_register_path_display))
+        _active_dataset = (
+            selected_name
+            if "selected_name" in locals() and selected_name
+            else os.path.basename(str(risk_register_path_display))
+        )
     except Exception:
         _active_dataset = "Unknown dataset"
 
@@ -370,10 +375,17 @@ if st.session_state.run:
     with st.expander(f"Active data: {_active_dataset}", expanded=False):
         # Desired columns and order
         desired_cols = [
-            "Risk_ID", "Asset", "Scenario",
-            "Likelihood", "Impact", "Risk Rating",
-            "Loss_Min", "Loss_Mode", "Loss_Max",
-            "Owner", "Notes",
+            "Risk_ID",
+            "Asset",
+            "Scenario",
+            "Likelihood",
+            "Impact",
+            "Risk Rating",
+            "Loss_Min",
+            "Loss_Mode",
+            "Loss_Max",
+            "Owner",
+            "Notes",
         ]
 
         # Map labels → actual columns (handle underscores)
@@ -417,11 +429,9 @@ if st.session_state.run:
             "Critical": "#E53935",  # deep red (white text for contrast)
         }
 
-
         def _hex_to_rgb(hex_color: str):
             hex_color = hex_color.lstrip("#")
-            return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
-
+            return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
 
         def _luminance(hex_color: str) -> float:
             r, g, b = _hex_to_rgb(hex_color)
@@ -433,14 +443,12 @@ if st.session_state.run:
             R, G, B = _conv(r), _conv(g), _conv(b)
             return 0.2126 * R + 0.7152 * G + 0.0722 * B
 
-
         def _auto_text_color(bg_hex: str) -> str:
             # WCAG-ish contrast: use black on light backgrounds, white on dark
             try:
                 return "black" if _luminance(bg_hex) > 0.45 else "white"
             except Exception:
                 return "black"
-
 
         def _risk_id_style(row):
             styles = ["" for _ in row.index]
@@ -454,7 +462,6 @@ if st.session_state.run:
                     styles[idx] = f"background-color: {bg}; color: {color};"
             return styles
 
-
         def _heat_cell(val):
             if pd.isna(val):
                 return ""
@@ -464,7 +471,6 @@ if st.session_state.run:
                 return ""
             color = _auto_text_color(bg)
             return f"background-color: {bg}; color: {color};"
-
 
         show_df = ref_df.copy()
         styler = show_df.style
