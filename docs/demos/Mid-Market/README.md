@@ -4,7 +4,7 @@
 **Purpose:** Demonstrate how RiskQuant helps mid-market organizations quantify cyber risk, compare domains, and support more effective budgeting and prioritization decisions
 
 ---
-![Mid-Market Demo Dashboard](docs/images/README-MM.png)
+![Mid-Market Demo Dashboard](../../images/README-MM.png)
 ## Overview
 
 This demonstration focuses on cyber risks commonly faced by mid-market organizations, where security responsibilities are often shared across IT, compliance, and third-party service providers.

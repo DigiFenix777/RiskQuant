@@ -5,7 +5,7 @@ This folder contains the **RiskQuant White Paper**, which provides a deeper tech
 If you are primarily interested in *how to use* the dashboard and interpret results at a scenario level, start with the demo documentation first. If you want to understand *why the model is structured the way it is*, how Monte Carlo applies to cyber risk, and how to interpret percentile-based outputs defensibly, this white paper is the right place.
 
 ---
-![ENT HC Demo Dashboard](docs/images/README-WP.png)
+![RiskQuant - White Paper](../images/README-WP.png)
 ## What the white paper covers
 
 The white paper is intended to support both technical and non-technical stakeholders by explaining:

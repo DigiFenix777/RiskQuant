@@ -17,6 +17,8 @@ The authoritative content is contained in the accompanying PDF documents.
 
 ## Demonstration scenarios
 
+---
+![RiskQuant Dashboard - SMB Demo Scenario](images/README-SMB.png)
 ### Small & Medium Business (SMB)
 **Primary focus:** Phishing and credential compromise  
 **Audience:** SMB leadership, IT managers, non-specialist stakeholders  
@@ -36,6 +38,8 @@ The authoritative content is contained in the accompanying PDF documents.
 📄 [SMB Demo](demos/SMB/README.md)
 
 ---
+
+![RiskQuant Demo Dashboard - Mid-Market Demo Scenario](images/README-MM.png)
 
 ### Mid-Market
 **Primary focus:** Vendor supply-chain compromise and SaaS platform failure  
@@ -57,6 +61,8 @@ The authoritative content is contained in the accompanying PDF documents.
 
 ---
 
+![RiskQuant Demo Dashboard - Enterprise Healthcare Demo Scenario](images/README-ENT-HC.png)
+
 ### Enterprise Healthcare
 **Primary focus:** Portfolio-level cyber risk in regulated healthcare environments  
 **Audience:** Security leadership, compliance teams, auditors, executives  
@@ -76,6 +82,7 @@ The authoritative content is contained in the accompanying PDF documents.
 📄 [Enterprise Healthcare Demo](demos/Enterprise-Healthcare/README.md)
 
 ---
+![RiskQuant Demo - White Paper](images/README-WP.png)
 
 ## White paper
 
