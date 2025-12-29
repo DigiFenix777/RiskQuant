@@ -4,7 +4,7 @@
 **Purpose:** Demonstrate how RiskQuant helps SMB organizations understand the potential financial impact of common cyber threats using Monte Carlo simulation
 
 ---
-
+![SMB Demo Dashboard](docs/images/README-SMB.png)
 ## Overview
 
 This demonstration focuses on one of the most common and impactful cyber risks faced by small and medium businesses: **phishing attacks leading to credential compromise**.
@@ -111,9 +111,16 @@ This demo is provided for **educational and illustrative purposes**.
 It is intended to help SMB audiences understand cyber risk exposure and decision-making tradeoffs, not to predict specific events or outcomes.
 
 --- 
+## Navigation
 
-## Return
+Return to the main project and demos:
 
-📄 [Docs Home](../../README.md)
+📄 [Project Home](../../README.md)
 
----
+📄 [Documentation Home](../README.md)
+
+Jump directly to the demo scenarios:
+
+📄 [Mid-Market Demo](../demos/Mid-Market/README.md)
+
+📄 [Enterprise Healthcare Demo](../demos/Enterprise-Healthcare/README.md)

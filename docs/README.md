@@ -94,7 +94,7 @@ The RiskQuant white paper provides a deeper technical and conceptual explanation
 
 ## Data sources and modeling assumptions
 
-📁 `docs/methodology/Data_Sources_and_Assumptions.md`
+📁 [Data Sources and Assumptions](methodology/Data_Sources_and_Assumptions.md)
 
 All demonstration scenarios are informed by **publicly available industry research and regulatory guidance**, which are explicitly cited within each document using white-paper notation (e.g., `[1]`, `[2]`).
 
@@ -132,3 +132,19 @@ They illustrate approaches to cyber risk quantification and decision support, no
 - Start with the demo that best matches your organization size
 - Review the white paper for technical depth
 - Explore the codebase to understand how the models and visualizations are implemented
+
+---
+## Navigation
+
+Return to the main project:
+
+📄 [Project Home](../../README.md)
+
+
+Jump directly to the demo scenarios:
+
+📄 [SMB Demo](../demos/SMB/README.md)
+
+📄 [Mid-Market Demo](../demos/Mid-Market/README.md)
+
+📄 [Enterprise Healthcare Demo](../demos/Enterprise-Healthcare/README.md)

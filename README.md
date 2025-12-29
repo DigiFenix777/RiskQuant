@@ -31,6 +31,8 @@ The platform emphasizes **transparency, defensibility, and education**, not pred
 
 RiskQuant includes three fully documented demonstration scenarios, each calibrated to a different organizational context:
 
+---
+
 ### Small & Medium Business (SMB)
 ![SMB Demo Dashboard](docs/images/README-SMB.png)
 - Focus: Phishing and credential compromise
@@ -168,3 +170,16 @@ Then select a demo risk register from the sidebar and explore the simulation out
 This project is released under the MIT License.
 
 ---
+## Navigation
+
+Proceed to the main project and demos:
+
+📄 [Documentation Home](../README.md)
+
+Jump directly to the demo scenarios:
+
+📄 [SMB Demo](../demos/SMB/README.md)
+
+📄 [Mid-Market Demo](../demos/Mid-Market/README.md)
+
+📄 [Enterprise Healthcare Demo](../demos/Enterprise-Healthcare/README.md)

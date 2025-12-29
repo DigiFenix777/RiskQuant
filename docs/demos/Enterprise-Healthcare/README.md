@@ -4,7 +4,7 @@
 **Purpose:** Demonstrate how RiskQuant supports enterprise-scale cyber risk analysis, portfolio synthesis, and decision-making in regulated healthcare environments
 
 ---
-
+![ENT HC Demo Dashboard](docs/images/README-ENT-HC.png)
 ## Overview
 
 This demonstration focuses on **enterprise healthcare organizations**, where cyber risk is shaped by a combination of regulated data, complex identity systems, legacy platforms, and operational dependencies.
@@ -118,9 +118,18 @@ This demo is provided for **educational and illustrative purposes**.
 It demonstrates approaches to enterprise cyber risk quantification and decision support in regulated environments and does not predict specific events or outcomes.
 
 --- 
+## Navigation
 
-## Return
+Return to the main project and demos:
 
-📄 [Docs Home](../../README.md)
+📄 [Project Home](../../README.md)
 
----
+📄 [Documentation Home](../README.md)
+
+Jump directly to the demo scenarios:
+
+📄 [SMB Demo](../demos/SMB/README.md)
+
+📄 [Mid-Market Demo](../demos/Mid-Market/README.md)
+
+
