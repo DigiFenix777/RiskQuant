@@ -40,6 +40,9 @@ RiskQuant includes three fully documented demonstration scenarios, each calibrat
 - Emphasis: Financial impact awareness and visualization interpretation
 
 📄 [SMB Demo](docs/demos/SMB/README.md)
+
+---
+
 ### Mid-Market
 ![Mid-Market Demo Dashboard](docs/images/README-MM.png)
 - Focus: Vendor supply-chain compromise and SaaS platform failure
@@ -48,6 +51,9 @@ RiskQuant includes three fully documented demonstration scenarios, each calibrat
 
 📄 [Mid-Market Demo](docs/demos/Mid-Market/README.md)
 ### Enterprise Healthcare
+
+---
+
 ![ENT HC Demo Dashboard](docs/images/README-ENT-HC.png)
 - Focus: Portfolio cyber risk in regulated healthcare environments
 - Audience: Security leadership, compliance teams, auditors, executives
@@ -55,11 +61,12 @@ RiskQuant includes three fully documented demonstration scenarios, each calibrat
 
 📄 [Enterprise Healthcare Demo](docs/demos/Enterprise-Healthcare/README.md)
 
+---
+
 📁 Full documentation and demo artifacts are available under:  
 [Documentation](docs/README.md)
 
 ---
-
 
 ## Documentation and supporting materials
 
