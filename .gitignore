@@ -5,6 +5,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Pytest / tooling
+.pytest_cache/
+.mypy_cache/
+
 # Virtual environments
 .venv/
 venv/
@@ -181,3 +185,6 @@ html/*.html
 # IDE metadata (redundant but safe)
 .idea/
 .vscode/
+
+# Ruff
+.ruff_cache/
