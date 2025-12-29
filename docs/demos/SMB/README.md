@@ -85,19 +85,23 @@ For a deeper technical explanation, see the RiskQuant white paper.
 
 ## Data sources and assumptions
 
+
 Scenario assumptions and loss ranges are informed by publicly available industry research and regulatory guidance. Sources are explicitly cited within the demonstration guide using white-paper notation (e.g., `[1]`, `[2]`).
+
 
 A centralized explanation of how these sources are used to defend modeling assumptions is available here:
 
-📄 `docs/methodology/Data_Sources_and_Assumptions.md`
+📄 [Data Sources and Assumptions](../../methodology/Data_Sources_and_Assumptions.md)
 
 ---
 
 ## Related materials
 
-- **Mid-Market demo:** `docs/demos/Mid-Market/`
-- **Enterprise Healthcare demo:** `docs/demos/Enterprise-Healthcare/`
-- **RiskQuant white paper:** `docs/whitepaper/`
+📄 [Mid-Market Demo](demos/Mid-Market/README.md)
+
+📄 [Enterprise Healthcare Demo](demos/Enterprise-Healthcare/README.md)
+
+📄 [White Paper](../../whitepaper/README.md)
 
 ---
 
@@ -105,3 +109,11 @@ A centralized explanation of how these sources are used to defend modeling assum
 
 This demo is provided for **educational and illustrative purposes**.  
 It is intended to help SMB audiences understand cyber risk exposure and decision-making tradeoffs, not to predict specific events or outcomes.
+
+--- 
+
+## Return
+
+📄 [Docs Home](../../README.md)
+
+---

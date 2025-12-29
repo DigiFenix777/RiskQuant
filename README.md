@@ -10,7 +10,7 @@ This repository serves as both:
 
 ---
 
-![RiskQuant Dashboard — Enterprise Healthcare Demo](docs/images/README Hero.png)
+![RiskQuant Dashboard — Enterprise Healthcare Demo](docs/images/README-Hero.png)
 *RiskQuant dashboard configured for the Enterprise Healthcare demonstration scenario.*
 
 ## What RiskQuant demonstrates
@@ -32,32 +32,36 @@ The platform emphasizes **transparency, defensibility, and education**, not pred
 RiskQuant includes three fully documented demonstration scenarios, each calibrated to a different organizational context:
 
 ### Small & Medium Business (SMB)
-![SMB Demo Dashboard](docs/images/README SMB.png)
+![SMB Demo Dashboard](docs/images/README-SMB.png)
 - Focus: Phishing and credential compromise
 - Audience: Business owners, IT managers, non-specialist stakeholders
 - Emphasis: Financial impact awareness and visualization interpretation
 
+📄 [SMB Demo](docs/demos/SMB/README.md)
 ### Mid-Market
-![Mid-Market Demo Dashboard](docs/images/README MM.png)
+![Mid-Market Demo Dashboard](docs/images/README-MM.png)
 - Focus: Vendor supply-chain compromise and SaaS platform failure
 - Audience: IT managers, security generalists, GRC practitioners
 - Emphasis: Domain comparison, prioritization, and budgeting
 
+📄 [Mid-Market Demo](docs/demos/Mid-Market/README.md)
 ### Enterprise Healthcare
-![ENT HC Demo Dashboard](docs/images/README ENT HC.png)
+![ENT HC Demo Dashboard](docs/images/README-ENT-HC.png)
 - Focus: Portfolio cyber risk in regulated healthcare environments
 - Audience: Security leadership, compliance teams, auditors, executives
 - Emphasis: Portfolio synthesis, regulatory exposure, and tail-risk analysis
 
+📄 [Enterprise Healthcare Demo](docs/demos/Enterprise-Healthcare/README.md)
+
 📁 Full documentation and demo artifacts are available under:  
-`docs/`
+[Documentation](docs/README.md)
 
 ---
 
 
 ## Documentation and supporting materials
 
-![RiskQuant Documentation — Enterprise Healthcare Demo](docs/images/README Demo Guide.png)
+![RiskQuant Documentation — Enterprise Healthcare Demo](docs/images/README-Demo-Guide.png)
 
 The `docs/` directory contains:
 
@@ -68,7 +72,7 @@ The `docs/` directory contains:
 - A centralized explanation of **data sources and modeling assumptions**
 
 📄 Start here:  
-`docs/README.md`
+[Documentation](docs/README.md)
 
 ---
 
@@ -96,7 +100,7 @@ Sources are explicitly cited within each demo and the white paper using standard
 
 A centralized explanation of how these sources are used is available here:
 
-📄 `docs/methodology/Data_Sources_and_Assumptions.md`
+📄 [Data Sources and Assumptions](docs/methodology/Data_Sources_and_Assumptions.md)
 
 ---
 

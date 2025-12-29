@@ -33,6 +33,8 @@ The authoritative content is contained in the accompanying PDF documents.
 - **RiskQuant for SMB Demo Visual Companion.pdf**  
   Companion slide deck with annotated screenshots and section-numbered callouts aligned to the written demo.
 
+📄 [SMB Demo](demos/SMB/README.md)
+
 ---
 
 ### Mid-Market
@@ -50,6 +52,8 @@ The authoritative content is contained in the accompanying PDF documents.
   Product demonstration guide focused on value realization, domain comparison, and scenario aggregation.
 - **RiskQuant for Mid-Market Demo Visual Companion.pdf**  
   Companion slide deck with annotated screenshots and section-numbered callouts aligned to the written demo.
+
+📄 [Mid-Market Demo](demos/Mid-Market/README.md)
 
 ---
 
@@ -69,9 +73,13 @@ The authoritative content is contained in the accompanying PDF documents.
 - **RiskQuant for Enterprise Healthcare Demo Visual Companion.pdf**  
   Companion slide deck with annotated screenshots and section-numbered callouts aligned to the written demo.
 
+📄 [Enterprise Healthcare Demo](demos/Enterprise-Healthcare/README.md)
+
 ---
 
 ## White paper
+
+📁 `docs/whitepaper/`
 
 The RiskQuant white paper provides a deeper technical and conceptual explanation of:
 
@@ -80,18 +88,19 @@ The RiskQuant white paper provides a deeper technical and conceptual explanation
 - Percentile-based interpretation (p50, p90, p95)
 - Design principles and implementation of the RiskQuant framework
 
-📁 `docs/whitepaper/`
+📄 [White Paper](whitepaper/README.md)
 
 ---
 
 ## Data sources and modeling assumptions
 
+📁 `docs/methodology/Data_Sources_and_Assumptions.md`
+
 All demonstration scenarios are informed by **publicly available industry research and regulatory guidance**, which are explicitly cited within each document using white-paper notation (e.g., `[1]`, `[2]`).
 
 A centralized explanation of how these sources are used to defend modeling assumptions and parameterization is provided for transparency and governance.
 
-📄 See:  
-`docs/methodology/Data_Sources_and_Assumptions.md`
+📄 Data Sources and Assumptions](methodology/Data_Sources_and_Assumptions.md)
 
 ---
 
