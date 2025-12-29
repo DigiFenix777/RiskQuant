@@ -1,3 +1,7 @@
 # Security Policy
-This is an educational portfolio project. No security patches are accepted. 
-If you discover an issue, please open an Issue with a minimal, non-sensitive description.
+
+This is an educational portfolio project. Security patches are not accepted.
+
+If you discover a security issue, please open a GitHub Issue with a minimal, non-sensitive description.
+Do not include secrets, credentials, personal data, or exploit code.
+
