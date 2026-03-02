@@ -150,37 +150,72 @@ def load_mappings() -> dict:
 
 def derive_parameters(df: pd.DataFrame, maps: dict) -> pd.DataFrame:
     """
-    Using Likelihood/Impact columns, attach numeric parameters needed by the simulator:
-    - Lambda_Min/Mode/Max
-    - Loss_Min/Mode/Max
+    Attach numeric parameters needed by the simulator.
+
+    Rule:
+    - Prefer numeric parameters provided in the risk register (Lambda_*, Loss_*).
+    - Only derive from Likelihood/Impact mappings when numeric fields are missing.
     """
+
+    df = df.copy()
+
+    lambda_cols = ["Lambda_Min", "Lambda_Mode", "Lambda_Max"]
+    loss_cols = ["Loss_Min", "Loss_Mode", "Loss_Max"]
+
+    # Ensure the numeric columns exist (create if missing)
+    for c in lambda_cols + loss_cols:
+        if c not in df.columns:
+            df[c] = pd.NA
+
+    # Coerce numeric columns (handles commas/$ that can appear in Excel)
+    def _to_num(s: pd.Series) -> pd.Series:
+        return pd.to_numeric(
+            s.astype(str)
+             .str.replace(",", "", regex=False)
+             .str.replace("$", "", regex=False)
+             .str.strip(),
+            errors="coerce",
+        )
+
+    for c in lambda_cols:
+        df[c] = _to_num(df[c])
+    for c in loss_cols:
+        df[c] = _to_num(df[c])
+
     like_map = maps["likelihood_to_lambda"]
     imp_map = maps["impact_to_loss"]
 
     def _like(row):
-        cfg = like_map.get(row["Likelihood"])
-        return (
-            pd.Series(
-                [cfg["min"], cfg["mode"], cfg["max"]],
-                index=["Lambda_Min", "Lambda_Mode", "Lambda_Max"],
-            )
-            if cfg
-            else pd.Series([None, None, None], index=["Lambda_Min", "Lambda_Mode", "Lambda_Max"])
-        )
+        cfg = like_map.get(row.get("Likelihood"))
+        if not cfg:
+            return pd.Series([pd.NA, pd.NA, pd.NA], index=lambda_cols)
+        return pd.Series([cfg["min"], cfg["mode"], cfg["max"]], index=lambda_cols)
 
     def _imp(row):
-        cfg = imp_map.get(row["Impact"])
-        return (
-            pd.Series([cfg["min"], cfg["mode"], cfg["max"]], index=["Loss_Min", "Loss_Mode", "Loss_Max"])
-            if cfg
-            else pd.Series([None, None, None], index=["Loss_Min", "Loss_Mode", "Loss_Max"])
-        )
+        cfg = imp_map.get(row.get("Impact"))
+        if not cfg:
+            return pd.Series([pd.NA, pd.NA, pd.NA], index=loss_cols)
+        return pd.Series([cfg["min"], cfg["mode"], cfg["max"]], index=loss_cols)
 
-    df = df.copy()
-    df[["Lambda_Min", "Lambda_Mode", "Lambda_Max"]] = df.apply(_like, axis=1)
-    df[["Loss_Min", "Loss_Mode", "Loss_Max"]] = df.apply(_imp, axis=1)
+    # Only fill numeric values where missing
+    missing_lambda = df[lambda_cols].isna().any(axis=1)
+    missing_loss = df[loss_cols].isna().any(axis=1)
+
+    if missing_lambda.any():
+        df.loc[missing_lambda, lambda_cols] = df.loc[missing_lambda].apply(_like, axis=1)
+
+    if missing_loss.any():
+        df.loc[missing_loss, loss_cols] = df.loc[missing_loss].apply(_imp, axis=1)
+
     return df
 
+    print("DEBUG BEFORE derive_parameters overwrite (focus scenarios):")
+    print(
+        df[df["Risk_ID"].isin(["CMP-01", "CMP-02", "OPS-01"])][
+            ["Risk_ID", "Likelihood", "Impact", "Lambda_Min", "Lambda_Mode", "Lambda_Max", "Loss_Min", "Loss_Mode",
+             "Loss_Max"]
+        ].to_string(index=False)
+    )
 
 if __name__ == "__main__":
     settings = load_settings()
