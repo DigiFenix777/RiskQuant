@@ -38,7 +38,7 @@ rpds-py==0.29.0
 ruff==0.14.10
 six==1.17.0
 smmap==5.0.2
-streamlit==1.51.0
+streamlit==1.54.0
 tenacity==9.1.2
 toml==0.10.2
 tornado==6.5.2
